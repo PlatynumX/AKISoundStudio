@@ -1,0 +1,246 @@
+bank,id,name,rate_hz,confidence,note
+00,0000,Bass Drum,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0000.
+00,0001,Snare Drum,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0001.
+00,0002,another drum,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0002.
+00,0003,cymbal light hit,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0003.
+00,0004,cymbal light hit 2,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0004.
+00,0005,cymbal strike,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0005.
+00,0006,cymbal strike 2,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0006.
+00,0007,cymbal light hit 3,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0007.
+00,0008,cowbell,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0008.
+00,0009,marimba or some other shaky instrument,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0009.
+00,000A,low bass (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 000A.
+00,000B,med bass,,,Exact decoded-audio match to WM2000 Bank 00 / ID 000B.
+00,000C,guitar 1 (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 000C.
+00,000D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,000E,guitar 3 (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 000E.
+00,000F,organ (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 000F.
+00,0010,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0011,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0012,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0013,bass (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 0011.
+00,0014,,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0012.
+00,0015,guitar 5,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0013.
+00,0016,guitar 6,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0014.
+00,0017,guitar 7,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0015.
+00,0018,,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0016.
+00,0019,guitar 8,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0017.
+00,001A,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,001B,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,001C,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,001D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,001E,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,001F,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0020,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0021,timpani,,,Exact decoded-audio match to WM2000 Bank 00 / ID 0018.
+00,0022,guitar 9 (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 0019.
+00,0023,guitar 10,,,Exact decoded-audio match to WM2000 Bank 00 / ID 001A.
+00,0024,guitar 11 (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 001B.
+00,0025,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0026,guitar 12,,,Exact decoded-audio match to WM2000 Bank 00 / ID 001C.
+00,0027,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0028,guitar 14 (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 001E.
+00,0029,sawtooth? (loop),,,Exact decoded-audio match to WM2000 Bank 00 / ID 001F.
+00,002A,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,002B,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,002C,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,002D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,002E,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,002F,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0030,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0031,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0032,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0033,cheering,11025,Reference,Exact decoded-audio match to WM2000 Bank 00 / ID 0021.
+00,0034,cheering (loop),11025,Reference,Exact decoded-audio match to WM2000 Bank 00 / ID 0022.
+00,0035,Explosion,,,Exact decoded-audio match to WM2000 Bank 00 / ID 002A.
+00,0036,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0037,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0038,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0039,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,003A,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,003B,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,003C,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,003D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,003E,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,003F,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0040,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0041,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0042,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0043,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0044,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0045,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0046,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0047,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0048,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0049,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,004A,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,004B,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,004C,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,004D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,004E,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,004F,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0050,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0051,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0052,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0053,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0054,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0055,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0056,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0057,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0058,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,0059,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,005A,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,005B,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,005C,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,005D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,005E,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+00,005F,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0000,Ring Bell,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0000.
+01,0001,Multiple Ring Bell,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0001.
+01,0002,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0002.
+01,0003,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0004,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0004.
+01,0005,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0005.
+01,0006,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0006.
+01,0007,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0007.
+01,0008,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0008.
+01,0009,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0009.
+01,000A,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 000A.
+01,000B,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 000B.
+01,000C,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 000C.
+01,000D,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 000D.
+01,000E,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 000E.
+01,000F,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 000F.
+01,0010,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0010.
+01,0011,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0011.
+01,0012,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0012.
+01,0013,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0014,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0014.
+01,0015,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0015.
+01,0016,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0016.
+01,0017,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0017.
+01,0018,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0018.
+01,0019,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0019.
+01,001A,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 001A.
+01,001B,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 001B.
+01,001C,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 001C.
+01,001D,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 001D.
+01,001E,Bone Crack,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 001E.
+01,001F,Run into ring post,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 001F.
+01,0020,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0020.
+01,0021,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0021.
+01,0022,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0022.
+01,0023,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0023.
+01,0024,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0024.
+01,0025,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0025.
+01,0026,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0026.
+01,0027,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0027.
+01,0028,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0028.
+01,0029,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0029.
+01,002A,(Crowd) Screaming,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 002A.
+01,002B,(Crowd) Booing,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 002B.
+01,002C,(Crowd) Loop,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 002C.
+01,002D,(Crowd) 1,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 002D.
+01,002E,(Crowd) 2,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 002E.
+01,002F,(Crowd) 3,11025,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 002F.
+01,0030,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0031,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0031.
+01,0032,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0032.
+01,0033,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0033.
+01,0034,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0034.
+01,0035,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0035.
+01,0036,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0036.
+01,0037,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0038,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0038.
+01,0039,Sting yell?,18000,Estimate,Exact decoded-audio match to WM2000 Bank 01 / ID 0039. 18000 but unsure
+01,003A,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 003A.
+01,003B,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 003B.
+01,003C,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 003C.
+01,003D,Randy Savage: OH YEAH!,18000,Estimate,Exact decoded-audio match to WM2000 Bank 01 / ID 003D. 18000 but unsure
+01,003E,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 003E.
+01,003F,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 003F.
+01,0040,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0040.
+01,0041,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0041.
+01,0042,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0043,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0044,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0045,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0045.
+01,0046,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0046.
+01,0047,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0047.
+01,0048,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0049,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,004A,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,004B,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,004C,Revenge Title Noise,,Unknown,Exact decoded-audio match to WM2000 Bank 01 / ID 004C. ???
+01,004D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,004E,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,004F,Fire loop,,Unknown,Exact decoded-audio match to WM2000 Bank 01 / ID 004F. ??
+01,0050,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0051,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0052,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0053,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0054,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0055,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0056,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0057,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0058,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0059,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0059.
+01,005A,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 005A.
+01,005B,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,005C,hiiii-yah (from Revenge credits),22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 005C.
+01,005D,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,005E,Swoosh,,,Exact decoded-audio match to WM2000 Bank 01 / ID 005E.
+01,005F,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0060,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0061,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0062,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0063,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0064,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0065,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0066,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0067,(Ref) Outside Count 1,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0067.
+01,0068,(Ref) Outside Count 2,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0068.
+01,0069,(Ref) Outside Count 3,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0069.
+01,006A,(Ref) Outside Count 4,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 006A.
+01,006B,(Ref) Outside Count 5,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 006B.
+01,006C,(Ref) Outside Count 6,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 006C.
+01,006D,(Ref) Outside Count 7,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 006D.
+01,006E,(Ref) Outside Count 8,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 006E.
+01,006F,(Ref) Outside Count 9,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 006F.
+01,0070,(Ref) Outside Count 10,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0070.
+01,0071,(Ref) Outside Count 11,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0071.
+01,0072,(Ref) Outside Count 12,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0072.
+01,0073,(Ref) Outside Count 13,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0073.
+01,0074,(Ref) Outside Count 14,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0074.
+01,0075,(Ref) Outside Count 15,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0075.
+01,0076,(Ref) Outside Count 16,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0076.
+01,0077,(Ref) Outside Count 17,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0077.
+01,0078,(Ref) Outside Count 18,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0078.
+01,0079,(Ref) Outside Count 19,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 0079.
+01,007A,(Ref) Outside Count 20,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 007A.
+01,007B,(Ref) Fight!,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 007B.
+01,007C,(Ref) Give Up?,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 007C.
+01,007D,(Ref) Break!,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 007D.
+01,007E,(Ref) Pinfall 1,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 007E.
+01,007F,(Ref) Pinfall 2,22050,Reference,Exact decoded-audio match to WM2000 Bank 01 / ID 007F.
+01,0080,(Ref) Pinfall 3 [22050] --------------------------------------------------------------------------------,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0080.
+01,0081,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0081.
+01,0082,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0082.
+01,0083,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0083.
+01,0084,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,0085,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0085.
+01,0086,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0086.
+01,0087,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0087.
+01,0088,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0088.
+01,0089,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0089.
+01,008A,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 008A.
+01,008B,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 008B.
+01,008C,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 008C.
+01,008D,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 008D.
+01,008E,,,,No exact decoded-audio match in the corresponding WM2000 bank; identification needed.
+01,008F,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 008F.
+01,0090,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0090.
+01,0091,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0091.
+01,0092,,,,Exact decoded-audio match to WM2000 Bank 01 / ID 0092.
+01,0093,,,,Nonstandard Redux tail record; decoded-audio comparison unavailable.
+01,0094,,,,Nonstandard Redux tail record; decoded-audio comparison unavailable.

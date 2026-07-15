@@ -1,10 +1,10 @@
-# AKI Sound Studio v0.5.4
+# AKI Sound Studio v0.5.7
 
-Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000** and **Virtual Pro Wrestling 2**.
+Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, and **WCW/nWo Revenge Redux**.
 
 ## What works
 
-- Auto-detects WM2000 `NWXE` and VPW2 `NA2J` ROMs.
+- Auto-detects WM2000 `NWXE`, VPW2 `NA2J`, and Revenge Redux `NW2E` ROMs.
 - Parses AKI `N64 PtrTablesV2` sound banks.
 - Decodes Nintendo VADPCM to 16-bit mono WAV.
 - Imports 16-bit PCM WAV replacements.
@@ -15,7 +15,7 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000** and **Virtual
 - Saves patched `.z64` ROMs and repairs N64 CRC1/CRC2.
 - Protects sequence/control data after a bank's exact last waveform in normal repack mode.
 - Supports Expert CTL/TBL end-offset overrides.
-- Shows WM2000 and VPW2 sample-rate evidence.
+- Shows WM2000, VPW2, and Revenge Redux sample-rate evidence, including ROM pitch keys and per-wave coarse/fine tuning.
 - Lets you edit the visible list name/rate for a selected sound.
 - Exports/imports hack profile CSV files containing bank locations and editable list entries.
 - Auto-detects relocated AKI sound bank locations when the known stock offsets no longer contain control banks.
@@ -23,14 +23,14 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000** and **Virtual
 
 ## Android/Termux repository updater
 
-Place `AKISoundStudio-v0.5.4-source-wavosaur-loop-points.zip` and `update_aki_sound_studio_v054_wavosaur_loop_points_termux.sh` on the phone, then run:
+Place `AKISoundStudio-v0.5.7-source-revenge-redux-rates.zip` and `update_aki_sound_studio_v057_revenge_redux_rates_termux.sh` on the phone, then run:
 
 ```bash
 termux-setup-storage
-bash ~/storage/downloads/update_aki_sound_studio_v054_wavosaur_loop_points_termux.sh
+bash ~/storage/downloads/update_aki_sound_studio_v057_revenge_redux_rates_termux.sh
 ```
 
-The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.5.4-win64.zip`.
+The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.5.7-win64.zip`.
 
 ## Editable list entries
 
@@ -88,3 +88,37 @@ Use **Tools -> Auto-detect sound locations** when a ROM hack still uses AKI `N64
 - Parses and writes the complete Nintendo `ALADPCMloop` record: start, end, repeat count, and sixteen signed decoder-state samples.
 - WAV exports include the same two loop points for looped sounds.
 - Adding a loop to a previously non-looped slot allocates a verified free 0x2C-byte block inside the bank CTL and avoids shared loop records.
+
+
+## v0.5.5 Revenge Redux support
+
+- Adds a built-in profile for the uploaded **WCW/nWo Revenge Redux (USA)** ROM (`NW2E`).
+- Uses Redux Bank 00 CTL/TBL at `0x02D62CEC` / `0x02D66BBC`.
+- Uses Redux Bank 01 CTL/TBL at `0x03D9715C` / `0x03D9D6EC`.
+- Parses all **245 records**: 96 in Bank 00 and 149 in Bank 01.
+- Adds `data/revenge_redux_sounds.csv` with one editable row for every Redux record.
+- Keeps every Redux record visible and editable. The provisional same-ID label copy was replaced in v0.5.6 after comparing the actual audio.
+- Keeps all updates on the existing public repository's `main` branch.
+
+
+## v0.5.6 verified Revenge Redux label mapping
+
+- Compared the uploaded stock WM2000 ROM (`SHA-1 442d417a52ed672ca1a47e7261a5414debb1e27a`) directly with the uploaded Revenge Redux ROM (`SHA-1 0695b127b654a1d6b79ffe7e62fb8f2981c26d5c`).
+- Decoded each valid Nintendo VADPCM record and matched sounds by exact PCM length and exact decoded sample data inside the corresponding bank.
+- Redux Bank 00 is not a straight WM2000 copy: it has 96 records versus 46, and only 32 Redux records exactly match a WM2000 Bank 00 sound. Several matching sounds moved to different IDs.
+- Redux Bank 01 has 149 records versus 147, with 113 exact decoded-audio matches. Thirty-four overlapping records differ, and two Redux tail records use non-frame-aligned data that cannot be decoded by the normal VADPCM comparison path.
+- `data/revenge_redux_sounds.csv` now copies only labels supported by an exact decoded-audio match. It contains 72 confirmed named rows; every unmatched record is left unlabeled for manual identification.
+- Removes the provisional labels from changed Bank 01 IDs `005F` through `0066` and corrects shifted Bank 00 labels such as cheering at Redux `0033`/`0034`.
+- See `REVENGE_REDUX_WM2K_COMPARISON.md` for the comparison method and corrected mapping summary.
+
+
+## v0.5.7 Revenge Redux ROM rate trace
+
+- Traces the 210 source-resident Redux SFX scripts referenced by the pointer table at ROM `0x00030ACC`.
+- Parses opcode `0x81` as a direct Bank 01 waveform selector and collects every pitch key used with that waveform.
+- Derives ROM playback-equivalent rates for **136 of 149 Bank 01 waveforms**. The 13 records with no fixed script reference remain unknown rather than receiving guessed rates.
+- Reads the PtrTablesV2 coarse-semitone byte table at header `+0x24` and the signed fine-cents byte at the start of each four-byte tuning entry referenced by header `+0x28`.
+- Applies the engine formula `11025 * 2^((key - 0x1F + coarse + fine/100) / 12)`. Multiple ROM pitch uses are retained as alternate rates.
+- Displays the traced pitch keys, coarse semitones, and fine cents in the sound details panel and exports them in metadata CSV.
+- Bank 00 remains without one fixed per-wave rate because it is the instrument/music bank and its samples are played across musical notes; v0.5.7 does not pretend those note-dependent samples have a single ROM rate.
+- See `REVENGE_REDUX_RATE_BACKTRACE.md` for the binary trace and unmapped record list. `REVENGE_REDUX_RATE_BACKTRACE.csv` contains all 149 Bank 01 rows with keys, tuning, rates, and trace status.

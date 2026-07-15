@@ -1,10 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -Eeuo pipefail
 
-ZIP_NAME="AKISoundStudio-v0.5.4-source-wavosaur-loop-points.zip"
+ZIP_NAME="AKISoundStudio-v0.5.7-source-revenge-redux-rates.zip"
 REPO_NAME="AKISoundStudio"
-WORK="$HOME/aki-sound-studio-v054-update"
-ARTIFACT="AKISoundStudio-v0.5.4-win64"
+WORK="$HOME/aki-sound-studio-v057-update"
+ARTIFACT="AKISoundStudio-v0.5.7-win64"
 WORKFLOW="windows-build.yml"
 DESCRIPTION="AKI N64 wrestling game sound-bank editor"
 LOG_FILE=""
@@ -60,7 +60,7 @@ for output_dir in \
 done
 [[ -n "$DOWNLOADS" ]] || fail "No writable Android download folder was found. Run termux-setup-storage, grant storage permission, and rerun this script."
 
-LOG_FILE="$DOWNLOADS/AKISoundStudio-v0.5.4-termux-update.log"
+LOG_FILE="$DOWNLOADS/AKISoundStudio-v0.5.7-termux-update.log"
 : > "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -104,8 +104,8 @@ resolve_source_zip() {
       candidates+=("$candidate")
     done < <(
       find "$root" -maxdepth 5 -type f \
-        \( -iname 'AKISoundStudio-v0.5.4-source*.zip' \
-           -o -iname '*AKISoundStudio*v0.5.4*source*.zip' \) \
+        \( -iname 'AKISoundStudio-v0.5.7-source*.zip' \
+           -o -iname '*AKISoundStudio*v0.5.7*source*.zip' \) \
         -print0 2>/dev/null
     )
   done
@@ -134,7 +134,7 @@ resolve_source_zip() {
   return 1
 }
 
-ZIP_PATH="$(resolve_source_zip)" || fail "Could not find the AKISoundStudio v0.5.4 source ZIP anywhere in shared phone storage."
+ZIP_PATH="$(resolve_source_zip)" || fail "Could not find the AKISoundStudio v0.5.7 source ZIP anywhere in shared phone storage."
 [[ -f "$ZIP_PATH" ]] || fail "Source ZIP resolved to an invalid path: $ZIP_PATH"
 
 info "Checking GitHub authentication"
@@ -155,7 +155,7 @@ REPO="$OWNER/$REPO_NAME"
 
 info "Preparing source from $(basename "$ZIP_PATH")"
 rm -rf "$WORK"
-mkdir -p "$WORK/unpacked" "$WORK/repository"
+mkdir -p "$WORK/unpacked"
 unzip -q "$ZIP_PATH" -d "$WORK/unpacked"
 
 CMAKE_FILE="$(find "$WORK/unpacked" -type f -name CMakeLists.txt -print -quit)"
@@ -163,21 +163,10 @@ CMAKE_FILE="$(find "$WORK/unpacked" -type f -name CMakeLists.txt -print -quit)"
 SOURCE_ROOT="${CMAKE_FILE%/CMakeLists.txt}"
 [[ -f "$SOURCE_ROOT/.github/workflows/$WORKFLOW" ]] || fail "The Windows build workflow is missing from the source ZIP."
 
-cp -a "$SOURCE_ROOT"/. "$WORK/repository"/
-rm -rf "$WORK/repository/.git" "$WORK/repository/build" "$WORK/repository/build-linux" "$WORK/repository/build-clang"
-
-cd "$WORK/repository"
-git init
-git checkout -B main
-git config user.name "$OWNER"
-git config user.email "$OWNER@users.noreply.github.com"
-git config core.autocrlf false
-git add -A
-git commit -m "AKI Sound Studio v0.5.4"
-HEAD_SHA="$(git rev-parse HEAD)"
-
+REPO_EXISTS=false
 if gh repo view "$REPO" >/dev/null 2>&1; then
-  info "Using existing repository $REPO"
+  REPO_EXISTS=true
+  info "Updating existing repository $REPO on main only"
 
   VISIBILITY="$(gh repo view "$REPO" --json visibility --jq .visibility)"
   if [[ "$VISIBILITY" != "PUBLIC" ]]; then
@@ -187,13 +176,46 @@ if gh repo view "$REPO" >/dev/null 2>&1; then
       --accept-visibility-change-consequences
   fi
 
-  git remote remove origin >/dev/null 2>&1 || true
-  git remote add origin "https://github.com/$REPO.git"
-
-  info "Uploading v0.5.4 source to the main branch"
-  git push --force --set-upstream origin main
+  if git ls-remote --exit-code --heads "https://github.com/$REPO.git" main >/dev/null 2>&1; then
+    git clone --branch main --single-branch "https://github.com/$REPO.git" "$WORK/repository"
+  else
+    # An existing but empty repository has no branch yet. Its first and only
+    # branch will be main; no version/update branch is created.
+    mkdir -p "$WORK/repository"
+    cd "$WORK/repository"
+    git init -b main
+    git remote add origin "https://github.com/$REPO.git"
+  fi
 else
-  info "Creating PUBLIC GitHub repository $REPO"
+  info "Creating PUBLIC GitHub repository $REPO with main as its only branch"
+  mkdir -p "$WORK/repository"
+  cd "$WORK/repository"
+  git init -b main
+fi
+
+cd "$WORK/repository"
+git config user.name "$OWNER"
+git config user.email "$OWNER@users.noreply.github.com"
+git config core.autocrlf false
+
+# Replace the checked-out source tree while preserving only .git. This updates
+# main in place and avoids creating a v0.5.7 or any other separate branch.
+find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+cp -a "$SOURCE_ROOT"/. .
+rm -rf build build-linux build-clang
+
+git add -A
+if git diff --cached --quiet; then
+  info "The main branch already contains this v0.5.7 source"
+else
+  git commit -m "AKI Sound Studio v0.5.7"
+fi
+HEAD_SHA="$(git rev-parse HEAD)"
+
+if [[ "$REPO_EXISTS" == true ]]; then
+  info "Pushing directly to the existing main branch"
+  git push --set-upstream origin main
+else
   gh repo create "$REPO" \
     --public \
     --description "$DESCRIPTION" \
@@ -205,7 +227,10 @@ fi
 VISIBILITY="$(gh repo view "$REPO" --json visibility --jq .visibility)"
 [[ "$VISIBILITY" == "PUBLIC" ]] || fail "$REPO exists but is not public. Current visibility: $VISIBILITY"
 
-info "Public repository confirmed: https://github.com/$REPO"
+CURRENT_BRANCH="$(git branch --show-current)"
+[[ "$CURRENT_BRANCH" == "main" ]] || fail "Updater unexpectedly left main. Current branch: $CURRENT_BRANCH"
+
+info "Public repository confirmed on main only: https://github.com/$REPO"
 
 info "Locating the GitHub Actions Windows build"
 RUN_ID=""
@@ -242,7 +267,7 @@ fi
 
 info "Watching GitHub Actions run $RUN_ID"
 if ! gh run watch "$RUN_ID" --repo "$REPO" --exit-status; then
-  BUILD_LOG="$DOWNLOADS/AKISoundStudio-v0.5.4-failed-build-$RUN_ID.log"
+  BUILD_LOG="$DOWNLOADS/AKISoundStudio-v0.5.7-failed-build-$RUN_ID.log"
   gh run view "$RUN_ID" --repo "$REPO" --log > "$BUILD_LOG" 2>&1 || true
   fail "Windows build failed. Build log saved to: $BUILD_LOG"
 fi

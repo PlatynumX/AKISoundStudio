@@ -1,4 +1,4 @@
-# Validation log - AKI Sound Studio v0.5.4
+# Validation log - AKI Sound Studio v0.5.7
 
 Validated in the Linux build environment with the platform-independent core smoke test.
 
@@ -59,3 +59,41 @@ Validated in the Linux build environment with the platform-independent core smok
 - GCC C++17 build: PASS.
 - Clang C++17 build: PASS.
 - CTest synthetic suite: PASS.
+
+
+## v0.5.5 Revenge Redux validation
+
+- Analyzed uploaded ROM title `REVENGE REDUX`, game code `NW2E`, SHA-1 `0695b127b654a1d6b79ffe7e62fb8f2981c26d5c`.
+- Confirmed exactly two `N64 PtrTablesV2` control banks.
+- Parsed 96 Bank 00 records and 149 Bank 01 records: **245 total**.
+- Loaded copied WM2000 labels for matching IDs and retained all Redux-only rows as editable unlabeled entries.
+- Decoded and re-encoded Bank 01 / `005F`; round-trip SNR was lossless for the decoded source in this test.
+- Completed a bank-local replacement/repack without losing the two non-frame-aligned tail records in Bank 01.
+- Repaired CRC1/CRC2 to `9A8FA1FE` / `980E1D55` in the in-memory validation copy.
+- GCC C++17 build: PASS.
+- CTest synthetic suite: PASS.
+- Full uploaded Redux ROM parser/decoder/replacement smoke test: PASS.
+
+
+## v0.5.6 WM2000-to-Revenge Redux audio comparison
+
+- Stock WM2000 SHA-1: `442d417a52ed672ca1a47e7261a5414debb1e27a`.
+- Revenge Redux SHA-1: `0695b127b654a1d6b79ffe7e62fb8f2981c26d5c`.
+- Compared exact encoded bytes, predictor books, loop records, decoded sample counts, and decoded PCM hashes.
+- Bank 00: WM2000 46 records; Redux 96 records; 32 exact decoded-audio matches. All 32 also have identical encoded bytes, predictor books, and loop records.
+- Bank 01: WM2000 147 records; Redux 149 records; 113 exact decoded-audio matches. All 113 also have identical encoded bytes, predictor books, and loop records.
+- Confirmed named Redux rows after content matching: 72.
+- Removed or corrected 35 provisional labels that had been copied by matching ID rather than matching audio.
+- Added five labels at shifted Redux IDs where the audio exactly matches a differently numbered WM2000 record.
+- Full Redux parser/replacement smoke test verifies shifted Bank 00 label `0033 = cheering` and verifies changed Bank 01 record `005F` remains unlabeled.
+
+
+## v0.5.7 Revenge Redux ROM rate trace
+
+- Parsed the source script pointer table at ROM `0x00030ACC` as 210 pointers.
+- All 210 scripts resolved inside ROM `0x0002FAE0-0x00030AB8` and parsed without an unknown/truncated opcode.
+- Found direct Bank 01 waveform selectors for 136 of 149 records.
+- Confirmed the 13 unreferenced IDs remain without `ROM-derived` confidence.
+- Added signed coarse-semitone and fine-cent parsing from PtrTablesV2 header pointers `+0x24` and `+0x28`.
+- Regression checks: `01/0001 = 11089 Hz` with +10 cents; `01/0031 = 20812 Hz` with +2 semitones; `01/0044 = 33038 Hz`; `01/005F = 31183 Hz`; `01/005A` remains untraced.
+- Full Redux parse/repack test still parses 245 records and preserves nonstandard tail records `0093/0094`.

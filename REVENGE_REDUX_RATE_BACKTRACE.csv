@@ -1,0 +1,150 @@
+bank,id,name,pitch_keys,coarse_semitones,fine_cents,primary_hz,alternate_hz,status
+01,0000,Ring Bell,0x1F 0x2B,0,0,11025,22050,ROM-derived
+01,0001,Multiple Ring Bell,0x1F,0,10,11089,,ROM-derived
+01,0002,,0x1F,0,0,11025,,ROM-derived
+01,0003,,0x1F,0,0,11025,,ROM-derived
+01,0004,,0x1F 0x21,0,0,11025,12375,ROM-derived
+01,0005,,0x1F,0,0,11025,,ROM-derived
+01,0006,,0x1F,0,0,11025,,ROM-derived
+01,0007,,0x1F,0,0,11025,,ROM-derived
+01,0008,,0x1F,0,0,11025,,ROM-derived
+01,0009,,,0,0,,,No fixed script reference
+01,000A,,0x1F,0,0,11025,,ROM-derived
+01,000B,,0x1F 0x1A,0,0,11025,8259,ROM-derived
+01,000C,,0x1F,0,0,11025,,ROM-derived
+01,000D,,0x1F,0,0,11025,,ROM-derived
+01,000E,,0x1F,0,0,11025,,ROM-derived
+01,000F,,0x1F,0,0,11025,,ROM-derived
+01,0010,,0x1F,0,0,11025,,ROM-derived
+01,0011,,0x1F,0,0,11025,,ROM-derived
+01,0012,,0x1F,0,0,11025,,ROM-derived
+01,0013,,0x1F,0,0,11025,,ROM-derived
+01,0014,,0x1F,0,0,11025,,ROM-derived
+01,0015,,0x1F,0,0,11025,,ROM-derived
+01,0016,,0x1F,0,0,11025,,ROM-derived
+01,0017,,0x1F 0x21,0,0,11025,12375,ROM-derived
+01,0018,,0x1D 0x21,0,0,9822,12375,ROM-derived
+01,0019,,0x20 0x21,0,0,11681,12375,ROM-derived
+01,001A,,0x1F,0,0,11025,,ROM-derived
+01,001B,,0x1F,0,0,11025,,ROM-derived
+01,001C,,0x1F,0,0,11025,,ROM-derived
+01,001D,,0x1F,0,0,11025,,ROM-derived
+01,001E,Bone Crack,0x1F,0,0,11025,,ROM-derived
+01,001F,Run into ring post,0x18,0,0,7358,,ROM-derived
+01,0020,,0x1F,0,0,11025,,ROM-derived
+01,0021,,0x1F,0,0,11025,,ROM-derived
+01,0022,,,0,0,,,No fixed script reference
+01,0023,,0x1F,0,0,11025,,ROM-derived
+01,0024,,0x1F,0,0,11025,,ROM-derived
+01,0025,,0x1B 0x1D 0x1F,0,64,9080,10192;11440,ROM-derived
+01,0026,,0x1F,0,0,11025,,ROM-derived
+01,0027,,0x1F,0,0,11025,,ROM-derived
+01,0028,,0x1F,0,0,11025,,ROM-derived
+01,0029,,,0,0,,,No fixed script reference
+01,002A,(Crowd) Screaming,0x1F,0,0,11025,,ROM-derived
+01,002B,(Crowd) Booing,0x1F,0,0,11025,,ROM-derived
+01,002C,(Crowd) Loop,0x1F,0,0,11025,,ROM-derived
+01,002D,(Crowd) 1,0x1F,0,0,11025,,ROM-derived
+01,002E,(Crowd) 2,0x1F,0,0,11025,,ROM-derived
+01,002F,(Crowd) 3,0x1F,0,0,11025,,ROM-derived
+01,0030,,,0,0,,,No fixed script reference
+01,0031,,0x28,2,0,20812,,ROM-derived
+01,0032,,0x28,1,0,19644,,ROM-derived
+01,0033,,0x28,0,0,18542,,ROM-derived
+01,0034,,0x28,0,0,18542,,ROM-derived
+01,0035,,0x28,0,0,18542,,ROM-derived
+01,0036,,0x28,0,0,18542,,ROM-derived
+01,0037,,0x28,0,0,18542,,ROM-derived
+01,0038,,0x28,0,0,18542,,ROM-derived
+01,0039,Sting yell?,0x28,0,0,18542,,ROM-derived
+01,003A,,0x28,0,0,18542,,ROM-derived
+01,003B,,0x28,0,0,18542,,ROM-derived
+01,003C,,0x24,0,0,14717,,ROM-derived
+01,003D,Randy Savage: OH YEAH!,0x25,0,0,15592,,ROM-derived
+01,003E,,0x28,0,0,18542,,ROM-derived
+01,003F,,0x28,0,0,18542,,ROM-derived
+01,0040,,0x2B,0,0,22050,,ROM-derived
+01,0041,,0x2D,0,0,24750,,ROM-derived
+01,0042,,,0,0,,,No fixed script reference
+01,0043,,,0,0,,,No fixed script reference
+01,0044,,0x32,0,0,33038,,ROM-derived
+01,0045,,0x32,0,0,33038,,ROM-derived
+01,0046,,0x26,0,0,16519,,ROM-derived
+01,0047,,0x30,0,0,29433,,ROM-derived
+01,0048,,0x1F,0,0,11025,,ROM-derived
+01,0049,,0x1F,0,0,11025,,ROM-derived
+01,004A,,0x1F,0,0,11025,,ROM-derived
+01,004B,,0x1F,0,0,11025,,ROM-derived
+01,004C,Revenge Title Noise,0x1D,0,0,9822,,ROM-derived
+01,004D,,0x22,0,0,13111,,ROM-derived
+01,004E,,0x1F 0x21,0,0,11025,12375,ROM-derived
+01,004F,Fire loop,0x1F,0,0,11025,,ROM-derived
+01,0050,,0x1F,0,0,11025,,ROM-derived
+01,0051,,0x1F,0,0,11025,,ROM-derived
+01,0052,,0x1F,0,0,11025,,ROM-derived
+01,0053,,0x1F,0,0,11025,,ROM-derived
+01,0054,,0x1F,0,0,11025,,ROM-derived
+01,0055,,0x1F,0,0,11025,,ROM-derived
+01,0056,,0x1F,0,0,11025,,ROM-derived
+01,0057,,0x1F,0,0,11025,,ROM-derived
+01,0058,,0x1F,0,0,11025,,ROM-derived
+01,0059,,0x26,0,0,16519,,ROM-derived
+01,005A,,,0,0,,,No fixed script reference
+01,005B,,0x2B,0,0,22050,,ROM-derived
+01,005C,hiiii-yah (from Revenge credits),0x2C,0,0,23361,,ROM-derived
+01,005D,,0x26,0,0,16519,,ROM-derived
+01,005E,Swoosh,0x30 0x20 0x33,0,0,29433,11681;35002,ROM-derived
+01,005F,,0x31,0,0,31183,,ROM-derived
+01,0060,,0x32 0x31,0,0,33038,31183,ROM-derived
+01,0061,,0x32,0,0,33038,,ROM-derived
+01,0062,,0x32,0,0,33038,,ROM-derived
+01,0063,,0x32,0,0,33038,,ROM-derived
+01,0064,,0x32,0,0,33038,,ROM-derived
+01,0065,,0x32,0,0,33038,,ROM-derived
+01,0066,,0x32,0,0,33038,,ROM-derived
+01,0067,(Ref) Outside Count 1,0x2B,0,0,22050,,ROM-derived
+01,0068,(Ref) Outside Count 2,0x2B,0,0,22050,,ROM-derived
+01,0069,(Ref) Outside Count 3,0x2B,0,0,22050,,ROM-derived
+01,006A,(Ref) Outside Count 4,0x2B,0,0,22050,,ROM-derived
+01,006B,(Ref) Outside Count 5,0x2B,0,0,22050,,ROM-derived
+01,006C,(Ref) Outside Count 6,0x2B,0,0,22050,,ROM-derived
+01,006D,(Ref) Outside Count 7,0x2B,0,0,22050,,ROM-derived
+01,006E,(Ref) Outside Count 8,0x2B,0,0,22050,,ROM-derived
+01,006F,(Ref) Outside Count 9,0x2B,0,0,22050,,ROM-derived
+01,0070,(Ref) Outside Count 10,0x2B,0,0,22050,,ROM-derived
+01,0071,(Ref) Outside Count 11,0x2B,0,0,22050,,ROM-derived
+01,0072,(Ref) Outside Count 12,0x2B,0,0,22050,,ROM-derived
+01,0073,(Ref) Outside Count 13,0x2B,0,0,22050,,ROM-derived
+01,0074,(Ref) Outside Count 14,0x2B,0,0,22050,,ROM-derived
+01,0075,(Ref) Outside Count 15,0x2B,0,0,22050,,ROM-derived
+01,0076,(Ref) Outside Count 16,0x2B,0,0,22050,,ROM-derived
+01,0077,(Ref) Outside Count 17,0x2B,0,0,22050,,ROM-derived
+01,0078,(Ref) Outside Count 18,0x2B,0,0,22050,,ROM-derived
+01,0079,(Ref) Outside Count 19,0x2B,0,0,22050,,ROM-derived
+01,007A,(Ref) Outside Count 20,0x2B,0,0,22050,,ROM-derived
+01,007B,(Ref) Fight!,0x2B,0,0,22050,,ROM-derived
+01,007C,(Ref) Give Up?,0x2B,0,0,22050,,ROM-derived
+01,007D,(Ref) Break!,0x2B,0,0,22050,,ROM-derived
+01,007E,(Ref) Pinfall 1,0x2B,0,0,22050,,ROM-derived
+01,007F,(Ref) Pinfall 2,0x2B,0,0,22050,,ROM-derived
+01,0080,(Ref) Pinfall 3 [22050] --------------------------------------------------------------------------------,0x2B,0,0,22050,,ROM-derived
+01,0081,,,0,0,,,No fixed script reference
+01,0082,,,0,0,,,No fixed script reference
+01,0083,,,0,0,,,No fixed script reference
+01,0084,,0x2E,0,0,26222,,ROM-derived
+01,0085,,0x30,0,0,29433,,ROM-derived
+01,0086,,,0,0,,,No fixed script reference
+01,0087,,0x24 0x26,0,0,14717,16519,ROM-derived
+01,0088,,0x26,0,0,16519,,ROM-derived
+01,0089,,0x26,0,0,16519,,ROM-derived
+01,008A,,0x2A 0x2C,0,0,20812,23361,ROM-derived
+01,008B,,0x2A 0x2C,0,0,20812,23361,ROM-derived
+01,008C,,0x2C 0x2A,0,0,23361,20812,ROM-derived
+01,008D,,0x2C,0,0,23361,,ROM-derived
+01,008E,,0x2C,0,0,23361,,ROM-derived
+01,008F,,0x21,0,0,12375,,ROM-derived
+01,0090,,0x2C,0,0,23361,,ROM-derived
+01,0091,,0x2C,0,0,23361,,ROM-derived
+01,0092,,0x2C,0,0,23361,,ROM-derived
+01,0093,,,127,0,,,No fixed script reference
+01,0094,,,127,0,,,No fixed script reference

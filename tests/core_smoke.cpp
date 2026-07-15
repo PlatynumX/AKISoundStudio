@@ -128,6 +128,14 @@ int main(int argc, char** argv) {
         return Fail("LoadedRom move did not rebind custom profile");
     }
 
+    if (aki::RevengeReduxProfile().banks.size() != 2 ||
+        aki::RevengeReduxProfile().banks[0].controlOffset != 0x02D62CEC ||
+        aki::RevengeReduxProfile().banks[0].waveOffset != 0x02D66BBC ||
+        aki::RevengeReduxProfile().banks[1].controlOffset != 0x03D9715C ||
+        aki::RevengeReduxProfile().banks[1].waveOffset != 0x03D9D6EC) {
+        return Fail("Revenge Redux built-in bank map changed unexpectedly");
+    }
+
     aki::LoadedRom emptyProfileRom;
     emptyProfileRom.customProfile.id = aki::GameId::VirtualProWrestling2;
     emptyProfileRom.profile = &emptyProfileRom.customProfile;
@@ -219,7 +227,7 @@ int main(int argc, char** argv) {
 
     if (argc == 1) {
         std::cout << "Core utility smoke tests passed.\n";
-        std::cout << "Pass a NWXE or NA2J ROM path to run the full parser/decoder smoke test.\n";
+        std::cout << "Pass a NWXE, NA2J, or Revenge Redux NW2E ROM path to run the full parser/decoder smoke test.\n";
         return 0;
     }
 
@@ -237,9 +245,20 @@ int main(int argc, char** argv) {
 
     aki::LabelDatabase labels;
     std::filesystem::path dataDirectory = argc >= 3 ? argv[2] : std::filesystem::path("data");
-    const std::filesystem::path labelFile = rom.profile->id == aki::GameId::WrestleMania2000
-        ? dataDirectory / "wm2k_sounds.csv"
-        : dataDirectory / "vpw2_sounds.csv";
+    std::filesystem::path labelFile;
+    switch (rom.profile->id) {
+        case aki::GameId::WrestleMania2000:
+            labelFile = dataDirectory / "wm2k_sounds.csv";
+            break;
+        case aki::GameId::VirtualProWrestling2:
+            labelFile = dataDirectory / "vpw2_sounds.csv";
+            break;
+        case aki::GameId::RevengeRedux:
+            labelFile = dataDirectory / "revenge_redux_sounds.csv";
+            break;
+        default:
+            return Fail("no label database for detected profile");
+    }
     if (!labels.loadCsv(labelFile, &error)) return Fail(error);
     if (!aki::ParseAkiBanks(rom, &labels, error)) return Fail(error);
     if (rom.sounds.empty()) return Fail("no sounds parsed");
@@ -256,7 +275,7 @@ int main(int argc, char** argv) {
         if (!target->label.rate.primaryHz || *target->label.rate.primaryHz != 33038) {
             return Fail("WM2000 Bank 01 / 005F rate trace did not resolve to 33038 Hz");
         }
-    } else {
+    } else if (rom.profile->id == aki::GameId::VirtualProWrestling2) {
         if (rom.sounds.size() != 516) {
             return Fail("VPW2 did not parse all 516 waveform records");
         }
@@ -301,6 +320,88 @@ int main(int argc, char** argv) {
             return Fail("VPW2 wrestler-voice reference/ROM rate evidence failed");
         }
         target = thunder;
+    } else if (rom.profile->id == aki::GameId::RevengeRedux) {
+        if (rom.sounds.size() != 245) {
+            return Fail("Revenge Redux did not parse all 245 bank records");
+        }
+        size_t bank0Count = 0;
+        size_t bank1Count = 0;
+        const aki::SoundRecord* copiedBank0 = nullptr;
+        const aki::SoundRecord* shiftedBank0 = nullptr;
+        const aki::SoundRecord* copiedBank1 = nullptr;
+        const aki::SoundRecord* fineTunedBank1 = nullptr;
+        const aki::SoundRecord* coarseTunedBank1 = nullptr;
+        const aki::SoundRecord* rate33038Bank1 = nullptr;
+        const aki::SoundRecord* unmatchedBank1 = nullptr;
+        const aki::SoundRecord* unreferencedBank1 = nullptr;
+        size_t romDerivedBank1Count = 0;
+        for (const auto& sound : rom.sounds) {
+            if (sound.bankId == 0) ++bank0Count;
+            if (sound.bankId == 1) {
+                ++bank1Count;
+                if (sound.label.rate.confidence == aki::RateConfidence::RomDerived &&
+                    !sound.pitchKeys.empty()) {
+                    ++romDerivedBank1Count;
+                }
+            }
+            if (sound.bankId == 0 && sound.soundId == 0x0000) copiedBank0 = &sound;
+            if (sound.bankId == 0 && sound.soundId == 0x0033) shiftedBank0 = &sound;
+            if (sound.bankId == 1 && sound.soundId == 0x0000) copiedBank1 = &sound;
+            if (sound.bankId == 1 && sound.soundId == 0x0001) fineTunedBank1 = &sound;
+            if (sound.bankId == 1 && sound.soundId == 0x0031) coarseTunedBank1 = &sound;
+            if (sound.bankId == 1 && sound.soundId == 0x0044) rate33038Bank1 = &sound;
+            if (sound.bankId == 1 && sound.soundId == 0x005A) unreferencedBank1 = &sound;
+            if (sound.bankId == 1 && sound.soundId == 0x005F) {
+                unmatchedBank1 = &sound;
+                target = &sound;
+            }
+        }
+        if (bank0Count != 96 || bank1Count != 149) {
+            return Fail("Revenge Redux bank counts are not 96 / 149");
+        }
+        if (!copiedBank0 || copiedBank0->label.name != "Bass Drum" ||
+            !shiftedBank0 || shiftedBank0->label.name != "cheering" ||
+            !copiedBank1 || copiedBank1->label.name != "Ring Bell") {
+            return Fail("Revenge Redux did not load the verified WM2000 audio-match labels");
+        }
+        if (!unmatchedBank1 || !unmatchedBank1->label.name.empty()) {
+            return Fail("Revenge Redux unmatched Bank 01 / 005F retained an unverified WM2000 label");
+        }
+        if (romDerivedBank1Count != 136) {
+            return Fail("Revenge Redux did not trace exactly 136 Bank 01 waveforms from ROM scripts");
+        }
+        if (!fineTunedBank1 || fineTunedBank1->fineTuneCents != 10 ||
+            !fineTunedBank1->label.rate.primaryHz ||
+            *fineTunedBank1->label.rate.primaryHz != 11089 ||
+            fineTunedBank1->pitchKeys != std::vector<uint8_t>{0x1F}) {
+            return Fail("Revenge Redux fine-tuned Bank 01 / 0001 rate trace failed");
+        }
+        if (!coarseTunedBank1 || coarseTunedBank1->coarseTuneSemitones != 2 ||
+            !coarseTunedBank1->label.rate.primaryHz ||
+            *coarseTunedBank1->label.rate.primaryHz != 20812 ||
+            coarseTunedBank1->pitchKeys != std::vector<uint8_t>{0x28}) {
+            return Fail("Revenge Redux coarse-tuned Bank 01 / 0031 rate trace failed");
+        }
+        if (!rate33038Bank1 || !rate33038Bank1->label.rate.primaryHz ||
+            *rate33038Bank1->label.rate.primaryHz != 33038 ||
+            rate33038Bank1->pitchKeys != std::vector<uint8_t>{0x32}) {
+            return Fail("Revenge Redux Bank 01 / 0044 did not trace to 33038 Hz");
+        }
+        if (!unmatchedBank1 || !unmatchedBank1->label.rate.primaryHz ||
+            *unmatchedBank1->label.rate.primaryHz != 31183 ||
+            unmatchedBank1->pitchKeys != std::vector<uint8_t>{0x31} ||
+            unmatchedBank1->label.rate.confidence != aki::RateConfidence::RomDerived) {
+            return Fail("Revenge Redux Bank 01 / 005F ROM rate trace failed");
+        }
+        if (!unreferencedBank1 || !unreferencedBank1->pitchKeys.empty() ||
+            unreferencedBank1->label.rate.confidence == aki::RateConfidence::RomDerived) {
+            return Fail("Revenge Redux unreferenced Bank 01 / 005A was assigned a guessed ROM rate");
+        }
+        if (!target || (target->encodedBytes % 9U) != 0) {
+            return Fail("Revenge Redux Bank 01 / 005F validation target is unavailable");
+        }
+    } else {
+        return Fail("unsupported detected profile in full smoke test");
     }
 
     const auto decoded = aki::DecodeSelectedSound(rom, *target, error);
@@ -346,6 +447,26 @@ int main(int argc, char** argv) {
         aki::DecodeSelectedSound(patched, *patchedTarget, error);
     if (!error.empty() || roundTrip.size() != decoded.size()) {
         return Fail("round-trip decode failed");
+    }
+
+    if (rom.profile->id == aki::GameId::RevengeRedux) {
+        for (const uint16_t tailId : {static_cast<uint16_t>(0x0093),
+                                      static_cast<uint16_t>(0x0094)}) {
+            const aki::SoundRecord* before = nullptr;
+            const aki::SoundRecord* after = nullptr;
+            for (const auto& sound : rom.sounds) {
+                if (sound.bankId == 1 && sound.soundId == tailId) before = &sound;
+            }
+            for (const auto& sound : patched.sounds) {
+                if (sound.bankId == 1 && sound.soundId == tailId) after = &sound;
+            }
+            if (!before || !after || before->encodedBytes != after->encodedBytes ||
+                !std::equal(rom.z64.begin() + before->waveDataOffset,
+                            rom.z64.begin() + before->waveDataOffset + before->encodedBytes,
+                            patched.z64.begin() + after->waveDataOffset)) {
+                return Fail("Revenge Redux nonstandard tail record changed during repack");
+            }
+        }
     }
 
     long double signal = 0.0L;

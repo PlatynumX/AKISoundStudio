@@ -383,12 +383,142 @@ std::map<uint16_t, std::vector<uint8_t>> TraceAkiBankPitchKeys(
     return result;
 }
 
+
+std::map<uint16_t, std::vector<uint8_t>> TraceAkiDirectPointerPitchKeys(
+    const LoadedRom& rom,
+    uint32_t pointerTableOffset,
+    uint32_t scriptCount,
+    uint32_t bankSoundCount) {
+    std::map<uint16_t, std::vector<uint8_t>> result;
+    if (pointerTableOffset == 0 || scriptCount == 0 || bankSoundCount == 0) {
+        return result;
+    }
+    if (static_cast<uint64_t>(pointerTableOffset) +
+            static_cast<uint64_t>(scriptCount) * 4ULL > rom.z64.size()) {
+        return result;
+    }
+
+    // Revenge's source segment maps ROM 0x1000 to RAM 0x80000400.
+    constexpr uint32_t kSourceRamMinusRom = 0x7FFFF400U;
+    try {
+        std::vector<uint32_t> starts;
+        starts.reserve(scriptCount);
+        for (uint32_t i = 0; i < scriptCount; ++i) {
+            const uint32_t runtimePointer =
+                ReadBe32(rom.z64, pointerTableOffset + i * 4U);
+            if (runtimePointer < kSourceRamMinusRom) return {};
+            const uint32_t romOffset = runtimePointer - kSourceRamMinusRom;
+            if (romOffset >= pointerTableOffset || romOffset >= rom.z64.size()) {
+                return {};
+            }
+            starts.push_back(romOffset);
+        }
+
+        const std::map<uint8_t, int> fixedLengths{
+            {0x82,1},{0x83,0},{0x84,7},{0x85,1},{0x86,2},{0x87,1},
+            {0x88,3},{0x89,3},{0x8A,0},{0x8C,0},{0x8D,1},{0x8E,0},
+            {0x8F,1},{0x91,0},{0x92,0},{0x93,0},{0x94,0},{0x95,1},
+            {0x96,0},{0x97,3},{0x98,0},{0x99,0},{0x9A,0},{0x9B,1},
+            {0x9C,1},{0x9D,2},{0x9F,0},{0xA0,1},{0xA1,6},{0xA2,1},
+            {0xA3,2},{0xA4,2},{0xA5,2},{0xA6,1},{0xA8,1},{0xA9,1},
+            {0xAA,1},{0xAC,0},
+        };
+        const std::set<uint8_t> variableOps{0x81,0x8B,0x90,0x9E,0xA7};
+
+        for (uint32_t script = 0; script < scriptCount; ++script) {
+            const uint32_t start = starts[script];
+            uint32_t end = pointerTableOffset;
+            for (const uint32_t candidate : starts) {
+                if (candidate > start && candidate < end) end = candidate;
+            }
+            if (start >= end || end > rom.z64.size()) continue;
+
+            size_t pos = start;
+            std::optional<uint32_t> waveId;
+            while (pos < end) {
+                const uint8_t value = rom.z64[pos++];
+                if (value >= 0x80) {
+                    const uint8_t opcode = value;
+                    if (opcode == 0x80) break;
+
+                    size_t parameterLength = 0;
+                    if (variableOps.count(opcode)) {
+                        if (pos >= end) break;
+                        parameterLength = (rom.z64[pos] & 0x80) ? 2 : 1;
+                    } else if (opcode == 0xAB) {
+                        if (pos >= end) break;
+                        parameterLength = 1;
+                        if (pos + 1 < end) {
+                            parameterLength +=
+                                (rom.z64[pos + 1] & 0x80) ? 2 : 1;
+                        }
+                    } else {
+                        const auto it = fixedLengths.find(opcode);
+                        if (it == fixedLengths.end()) break;
+                        parameterLength = static_cast<size_t>(it->second);
+                    }
+
+                    if (pos + parameterLength > end) break;
+                    if (opcode == 0x81 && parameterLength > 0) {
+                        uint32_t selected = 0;
+                        if ((rom.z64[pos] & 0x80) && parameterLength >= 2) {
+                            selected = ((rom.z64[pos] & 0x7F) << 8) |
+                                       rom.z64[pos + 1];
+                        } else {
+                            selected = rom.z64[pos];
+                        }
+                        waveId = selected < bankSoundCount
+                            ? std::optional<uint32_t>(selected)
+                            : std::nullopt;
+                    }
+                    pos += parameterLength;
+                    continue;
+                }
+
+                const uint8_t pitchKey = value;
+                if (pos >= end) break;
+                const size_t durationLength = (rom.z64[pos] & 0x80) ? 2 : 1;
+                if (pos + durationLength > end) break;
+                pos += durationLength;
+
+                if (!waveId) continue;
+                auto& keys = result[static_cast<uint16_t>(*waveId)];
+                if (std::find(keys.begin(), keys.end(), pitchKey) == keys.end()) {
+                    keys.push_back(pitchKey);
+                }
+            }
+        }
+    } catch (...) {
+        result.clear();
+    }
+    return result;
+}
+
+std::map<uint16_t, std::vector<uint8_t>> TraceRevengeReduxBank1PitchKeys(
+    const LoadedRom& rom) {
+    uint32_t bankSoundCount = 0;
+    for (const auto& sound : rom.sounds) {
+        if (sound.bankId == 1) {
+            bankSoundCount =
+                std::max<uint32_t>(bankSoundCount, sound.soundId + 1U);
+        }
+    }
+    // ROM 0x00030ACC is a 210-entry table of source-resident AKI SFX script
+    // pointers. Unlike WM2000's selector object, Redux opcode 0x81 contains
+    // the Bank 01 waveform ID directly.
+    return TraceAkiDirectPointerPitchKeys(
+        rom, 0x00030ACCU, 210U, bankSoundCount);
+}
+
 uint32_t AkiPlaybackRateFromPitch(uint32_t mixerRateHz,
                                   uint8_t pitchKey,
-                                  int16_t coarseTuneSemitones) {
+                                  int16_t coarseTuneSemitones,
+                                  int16_t fineTuneCents = 0) {
     if (mixerRateHz == 0) return 0;
     const double semitoneOffset =
-        static_cast<int>(pitchKey) - 48 + static_cast<int>(coarseTuneSemitones);
+        static_cast<int>(pitchKey) - 48 +
+        static_cast<int>(coarseTuneSemitones) +
+        static_cast<double>(fineTuneCents) / 100.0;
     const double rate =
         static_cast<double>(mixerRateHz) * std::pow(2.0, semitoneOffset / 12.0);
     return static_cast<uint32_t>(std::llround(rate));
@@ -411,8 +541,16 @@ std::map<uint16_t, std::vector<uint8_t>> TraceWm2kBank1PitchKeys(const LoadedRom
     return TraceAkiBankPitchKeys(rom, *bankIt, bankSoundCount);
 }
 
-uint32_t Wm2kRateFromPitch(uint8_t pitchKey) {
-    const double rate = 11025.0 * std::pow(2.0, (static_cast<int>(pitchKey) - 0x1F) / 12.0);
+uint32_t Wm2kRateFromPitch(uint8_t pitchKey,
+                              int16_t coarseTuneSemitones = 0,
+                              int16_t fineTuneCents = 0) {
+    // WM2000/Revenge use the same AKI SFX pitch convention. Key 0x1F
+    // represents 11025 Hz; every twelve key/tuning semitones doubles it.
+    const double semitoneOffset =
+        static_cast<int>(pitchKey) - 0x1F +
+        static_cast<int>(coarseTuneSemitones) +
+        static_cast<double>(fineTuneCents) / 100.0;
+    const double rate = 11025.0 * std::pow(2.0, semitoneOffset / 12.0);
     return static_cast<uint32_t>(std::llround(rate));
 }
 
@@ -456,6 +594,13 @@ uint32_t ExpectedSoundCount(GameId game, uint16_t bankId) {
             case 5: return 36;
             case 6: return 63;
             case 7: return 63;
+            default: return 0;
+        }
+    }
+    if (game == GameId::RevengeRedux) {
+        switch (bankId) {
+            case 0: return 96;
+            case 1: return 149;
             default: return 0;
         }
     }
@@ -871,6 +1016,23 @@ const GameProfile& VirtualProWrestling2Profile() {
     return profile;
 }
 
+const GameProfile& RevengeReduxProfile() {
+    static const GameProfile profile{
+        GameId::RevengeRedux,
+        "NW2E",
+        "WCW/nWo Revenge Redux (USA)",
+        "0695b127b654a1d6b79ffe7e62fb8f2981c26d5c",
+        28800,
+        {
+            {0, 0x02D62CEC, 0x02D66BBC, 0x00000000,
+             "Redux instruments, music, and miscellaneous sounds"},
+            {1, 0x03D9715C, 0x03D9D6EC, 0x00000000,
+             "Redux game sounds, voices, and additional data"},
+        },
+    };
+    return profile;
+}
+
 bool ProfileStockBanksPresent(const std::vector<uint8_t>& rom, const GameProfile& profile) {
     for (const auto& bank : profile.banks) {
         const uint32_t expectedCount = ExpectedSoundCount(profile.id, bank.bankId);
@@ -916,20 +1078,24 @@ const GameProfile* DetectProfileFromRom(const std::string& gameCode,
     // Header match remains the fastest path for clean stock ROMs.
     if (gameCode == WrestleMania2000Profile().gameCode) return &WrestleMania2000Profile();
     if (gameCode == VirtualProWrestling2Profile().gameCode) return &VirtualProWrestling2Profile();
+    if (gameCode == RevengeReduxProfile().gameCode) return &RevengeReduxProfile();
 
     // Hack/prototype path: many ROM hacks change title/header code while
     // leaving the AKI sound banks intact.  v0.5 incorrectly rejected those
     // ROMs before the bank scanner ever had a chance to run.
     if (ProfileStockBanksPresent(rom, WrestleMania2000Profile())) return &WrestleMania2000Profile();
     if (ProfileStockBanksPresent(rom, VirtualProWrestling2Profile())) return &VirtualProWrestling2Profile();
+    if (ProfileStockBanksPresent(rom, RevengeReduxProfile())) return &RevengeReduxProfile();
 
     // Last-resort family guess from the bank-count signature.  This is enough
     // to choose the profile, after which ParseAkiBanks/AutoDetectSoundBankLocations
     // performs the stricter per-bank parse.
     const bool looksWm2k = CandidateCountsContainProfile(rom, WrestleMania2000Profile());
     const bool looksVpw2 = CandidateCountsContainProfile(rom, VirtualProWrestling2Profile());
-    if (looksWm2k && !looksVpw2) return &WrestleMania2000Profile();
-    if (looksVpw2 && !looksWm2k) return &VirtualProWrestling2Profile();
+    const bool looksRedux = CandidateCountsContainProfile(rom, RevengeReduxProfile());
+    if (looksWm2k && !looksVpw2 && !looksRedux) return &WrestleMania2000Profile();
+    if (looksVpw2 && !looksWm2k && !looksRedux) return &VirtualProWrestling2Profile();
+    if (looksRedux && !looksWm2k && !looksVpw2) return &RevengeReduxProfile();
 
     return nullptr;
 }
@@ -937,6 +1103,7 @@ const GameProfile* DetectProfileFromRom(const std::string& gameCode,
 const GameProfile* DetectProfile(const std::string& gameCode) {
     if (gameCode == WrestleMania2000Profile().gameCode) return &WrestleMania2000Profile();
     if (gameCode == VirtualProWrestling2Profile().gameCode) return &VirtualProWrestling2Profile();
+    if (gameCode == RevengeReduxProfile().gameCode) return &RevengeReduxProfile();
     return nullptr;
 }
 
@@ -985,7 +1152,7 @@ bool LoadRom(const std::filesystem::path& path, LoadedRom& out, std::string& err
     const GameProfile* detectedProfile = DetectProfileFromRom(out.gameCode, out.z64);
     if (!detectedProfile) {
         error = "Unsupported ROM header/game code '" + out.gameCode +
-                "'. No stock or moved AKI WM2000/VPW2 sound-bank signature was detected.";
+                "'. No supported AKI WM2000, VPW2, or Revenge Redux sound-bank signature was detected.";
         return false;
     }
     out.customProfile = *detectedProfile;
@@ -1033,7 +1200,7 @@ bool ParseAkiBanks(LoadedRom& rom, const LabelDatabase* labels, std::string& err
             }
             const uint32_t count = ReadBe32(rom.z64, bank.controlOffset + 0x20);
             const uint32_t tuningTableRelative = ReadBe32(rom.z64, bank.controlOffset + 0x24);
-            const uint32_t tuningTableEndRelative = ReadBe32(rom.z64, bank.controlOffset + 0x28);
+            const uint32_t fineTuningTableRelative = ReadBe32(rom.z64, bank.controlOffset + 0x28);
             const uint32_t recordTableRelative = ReadBe32(rom.z64, bank.controlOffset + 0x2C);
             if (count == 0 || count > 0x10000) {
                 error = "Invalid sound count in bank " + Hex4(bank.bankId) + ".";
@@ -1052,11 +1219,14 @@ bool ParseAkiBanks(LoadedRom& rom, const LabelDatabase* labels, std::string& err
 
             const bool hasTuningTable =
                 tuningTableRelative != 0 &&
-                tuningTableRelative <= tuningTableEndRelative &&
-                static_cast<uint64_t>(tuningTableRelative) + count <=
-                    tuningTableEndRelative &&
                 static_cast<uint64_t>(bank.controlOffset) +
                         tuningTableRelative + count <=
+                    rom.z64.size();
+            const bool hasFineTuningTable =
+                fineTuningTableRelative != 0 &&
+                static_cast<uint64_t>(bank.controlOffset) +
+                        fineTuningTableRelative +
+                        static_cast<uint64_t>(count) * 4ULL <=
                     rom.z64.size();
 
             for (uint32_t id = 0; id < count; ++id) {
@@ -1117,6 +1287,14 @@ bool ParseAkiBanks(LoadedRom& rom, const LabelDatabase* labels, std::string& err
                         rawTune < 0x80
                             ? static_cast<int16_t>(rawTune)
                             : static_cast<int16_t>(static_cast<int>(rawTune) - 256);
+                }
+                if (hasFineTuningTable) {
+                    const uint8_t rawFine = rom.z64[
+                        bank.controlOffset + fineTuningTableRelative + id * 4U];
+                    sound.fineTuneCents =
+                        rawFine < 0x80
+                            ? static_cast<int16_t>(rawFine)
+                            : static_cast<int16_t>(static_cast<int>(rawFine) - 256);
                 }
 
                 const uint64_t bookValues = static_cast<uint64_t>(sound.predictorOrder) * sound.predictorCount * 8;
@@ -1203,7 +1381,8 @@ void ApplyProfileRateRules(LoadedRom& rom) {
                     const uint32_t rate = AkiPlaybackRateFromPitch(
                         rom.profile->mixerRateHz,
                         key,
-                        sound.coarseTuneSemitones);
+                        sound.coarseTuneSemitones,
+                        sound.fineTuneCents);
                     if (rate != 0 &&
                         std::find(derived.begin(), derived.end(), rate) ==
                             derived.end()) {
@@ -1262,7 +1441,8 @@ void ApplyProfileRateRules(LoadedRom& rom) {
             sound.pitchKeys = it->second;
             std::vector<uint32_t> derived;
             for (const uint8_t key : it->second) {
-                const uint32_t rate = Wm2kRateFromPitch(key);
+                const uint32_t rate = Wm2kRateFromPitch(
+                    key, sound.coarseTuneSemitones, sound.fineTuneCents);
                 if (std::find(derived.begin(), derived.end(), rate) == derived.end()) derived.push_back(rate);
             }
             if (derived.empty()) continue;
@@ -1284,6 +1464,51 @@ void ApplyProfileRateRules(LoadedRom& rom) {
                         std::string("Reference estimate was ") + std::to_string(*oldEstimate) + " Hz.";
                 }
             }
+        }
+        return;
+    }
+
+    if (rom.profile->id == GameId::RevengeRedux) {
+        const auto pitches = TraceRevengeReduxBank1PitchKeys(rom);
+        for (auto& sound : rom.sounds) {
+            if (sound.bankId != 1) continue;
+            const auto it = pitches.find(sound.soundId);
+            if (it == pitches.end() || it->second.empty()) continue;
+
+            sound.pitchKeys = it->second;
+            std::vector<uint32_t> derived;
+            for (const uint8_t key : it->second) {
+                const uint32_t rate = Wm2kRateFromPitch(
+                    key, sound.coarseTuneSemitones, sound.fineTuneCents);
+                if (rate != 0 &&
+                    std::find(derived.begin(), derived.end(), rate) ==
+                        derived.end()) {
+                    derived.push_back(rate);
+                }
+            }
+            if (derived.empty()) continue;
+
+            const auto oldReference = sound.label.rate.primaryHz;
+            sound.label.rate.primaryHz = derived.front();
+            sound.label.rate.alternateHz.clear();
+            for (size_t i = 1; i < derived.size(); ++i) {
+                AddAlternateUnique(sound.label.rate, derived[i]);
+            }
+            if (oldReference && *oldReference != derived.front()) {
+                AddAlternateUnique(sound.label.rate, *oldReference);
+                sound.label.rate.note +=
+                    (sound.label.rate.note.empty() ? "" : " ") +
+                    std::string("Previous WM2000-match reference was ") +
+                    std::to_string(*oldReference) + " Hz.";
+            }
+            sound.label.rate.confidence = RateConfidence::RomDerived;
+            sound.label.rate.method =
+                "Revenge Redux ROM SFX pointer-script + wave tuning";
+            sound.label.rate.note +=
+                (sound.label.rate.note.empty() ? "" : " ") +
+                std::string("Pitch keys come from the 210-entry script-pointer "
+                            "table at ROM 0x00030ACC; coarse/fine tuning comes "
+                            "from this waveform's PtrTablesV2 record tables.");
         }
     }
 }
@@ -2611,7 +2836,7 @@ bool ExportMetadataCsv(const LoadedRom& rom,
         error = "Could not create CSV file: " + path.string();
         return false;
     }
-    out << "bank,id,name,rate_hz,confidence,method,alternate_rates,coarse_tune_semitones,pitch_keys,encoded_bytes,decoded_samples,control_record,wave_data,loop_record,loop_start,loop_end,loop_count,notes\r\n";
+    out << "bank,id,name,rate_hz,confidence,method,alternate_rates,coarse_tune_semitones,fine_tune_cents,pitch_keys,encoded_bytes,decoded_samples,control_record,wave_data,loop_record,loop_start,loop_end,loop_count,notes\r\n";
     for (const auto& sound : rom.sounds) {
         std::ostringstream alternates;
         for (size_t i = 0; i < sound.label.rate.alternateHz.size(); ++i) {
@@ -2635,6 +2860,7 @@ bool ExportMetadataCsv(const LoadedRom& rom,
             << ',' << CsvEscape(sound.label.rate.method)
             << ',' << CsvEscape(alternates.str())
             << ',' << sound.coarseTuneSemitones
+            << ',' << sound.fineTuneCents
             << ',' << CsvEscape(pitchKeys.str())
             << ',' << sound.encodedBytes
             << ',' << sound.decodedSampleCount()

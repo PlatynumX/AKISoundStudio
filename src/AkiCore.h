@@ -14,6 +14,7 @@ enum class GameId {
     Unknown,
     WrestleMania2000,
     VirtualProWrestling2,
+    RevengeRedux,
 };
 
 enum class RomByteOrder {
@@ -76,6 +77,7 @@ struct SoundRecord {
     uint32_t predictorOrder = 0;
     uint32_t predictorCount = 0;
     int16_t coarseTuneSemitones = 0;
+    int16_t fineTuneCents = 0;
     std::vector<uint8_t> pitchKeys;
     std::vector<int16_t> predictorBook;
     std::vector<uint8_t> replacementEncoded;
@@ -171,6 +173,7 @@ private:
 
 const GameProfile& WrestleMania2000Profile();
 const GameProfile& VirtualProWrestling2Profile();
+const GameProfile& RevengeReduxProfile();
 const GameProfile* DetectProfile(const std::string& gameCode);
 
 bool LoadRom(const std::filesystem::path& path, LoadedRom& out, std::string& error);

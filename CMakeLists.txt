@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AKISoundStudio VERSION 0.5.4 LANGUAGES CXX)
+project(AKISoundStudio VERSION 0.5.7 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,6 +26,7 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/data/vpw2_sounds.csv"
             "${CMAKE_SOURCE_DIR}/data/wm2k_sounds.csv"
+            "${CMAKE_SOURCE_DIR}/data/revenge_redux_sounds.csv"
             "$<TARGET_FILE_DIR:AKISoundStudio>/data"
         VERBATIM
     )

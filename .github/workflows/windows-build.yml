@@ -3,7 +3,7 @@ name: Windows build
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AKISoundStudio-v0.5.4-win64
+          name: AKISoundStudio-v0.5.7-win64
           path: |
             package/AKISoundStudio.exe
             package/data

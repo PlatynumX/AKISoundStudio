@@ -27,7 +27,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.5.4";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.5.7";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -172,7 +172,8 @@ std::filesystem::path FindDataDirectory(const std::filesystem::path& executableD
     };
     for (const auto& candidate : candidates) {
         if (std::filesystem::exists(candidate / L"vpw2_sounds.csv") &&
-            std::filesystem::exists(candidate / L"wm2k_sounds.csv")) {
+            std::filesystem::exists(candidate / L"wm2k_sounds.csv") &&
+            std::filesystem::exists(candidate / L"revenge_redux_sounds.csv")) {
             return candidate;
         }
     }
@@ -188,7 +189,7 @@ std::wstring OpenRomDialog() {
     dialog.lpstrFile = filename;
     dialog.nMaxFile = static_cast<DWORD>(std::size(filename));
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
-    dialog.lpstrTitle = L"Open VPW2 or WrestleMania 2000 ROM";
+    dialog.lpstrTitle = L"Open VPW2, WrestleMania 2000, or Revenge Redux ROM";
     if (!GetOpenFileNameW(&dialog)) return {};
     return filename;
 }
@@ -367,6 +368,19 @@ std::wstring SoundDetails(const aki::SoundRecord& sound) {
     out << L"Sample rate: " << RateDisplay(sound) << L" Hz\r\n";
     out << L"Confidence: " << Utf8ToWide(aki::RateConfidenceText(sound.label.rate.confidence)) << L"\r\n";
     out << L"Method: " << (sound.label.rate.method.empty() ? L"Unknown" : Utf8ToWide(sound.label.rate.method)) << L"\r\n";
+    if (!sound.pitchKeys.empty()) {
+        out << L"ROM pitch keys: ";
+        for (size_t i = 0; i < sound.pitchKeys.size(); ++i) {
+            if (i) out << L", ";
+            out << L"0x" << std::uppercase << std::hex
+                << std::setw(2) << std::setfill(L'0')
+                << static_cast<unsigned>(sound.pitchKeys[i])
+                << std::dec;
+        }
+        out << L"\r\n";
+    }
+    out << L"Wave tuning: " << sound.coarseTuneSemitones
+        << L" semitones, " << sound.fineTuneCents << L" cents\r\n";
     if (!sound.label.rate.alternateHz.empty()) {
         out << L"Alternate playback-equivalent rates: ";
         for (size_t i = 0; i < sound.label.rate.alternateHz.size(); ++i) {
@@ -526,9 +540,21 @@ void PopulateBankFilter() {
 
 bool LoadLabelsForCurrentRom(std::string& error) {
     if (!gApp.rom.profile) return false;
-    const wchar_t* filename = gApp.rom.profile->id == aki::GameId::WrestleMania2000
-        ? L"wm2k_sounds.csv"
-        : L"vpw2_sounds.csv";
+    const wchar_t* filename = nullptr;
+    switch (gApp.rom.profile->id) {
+        case aki::GameId::WrestleMania2000:
+            filename = L"wm2k_sounds.csv";
+            break;
+        case aki::GameId::VirtualProWrestling2:
+            filename = L"vpw2_sounds.csv";
+            break;
+        case aki::GameId::RevengeRedux:
+            filename = L"revenge_redux_sounds.csv";
+            break;
+        default:
+            error = "No label database is configured for the selected game profile.";
+            return false;
+    }
     return gApp.labels.loadCsv(gApp.dataDirectory / filename, &error);
 }
 
@@ -887,8 +913,8 @@ void OpenExportFolder() {
 
 void ShowAbout() {
     const wchar_t* text =
-        L"AKI Sound Studio 0.5.4\r\n\r\n"
-        L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2 and WWF WrestleMania 2000.\r\n\r\n"
+        L"AKI Sound Studio 0.5.7\r\n\r\n"
+        L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, and WCW/nWo Revenge Redux.\r\n\r\n"
         L"Current features:\r\n"
         L"• Stock and compatible-hack ROM detection\r\n"
         L"• Searchable sound lists with editable names and rates\r\n"
@@ -897,7 +923,7 @@ void ShowAbout() {
         L"• Wavosaur-compatible two-point WAV loops with rebuilt ADPCM loop state\r\n"
         L"• Hack profile CSV import/export and relocated-bank auto-detection\r\n"
         L"• Big-endian .z64 save-as with CIC-6102 CRC repair\r\n\r\n"
-        L"Version 0.5.4 uses the replacement WAV's two loop points exactly and never inherits stale loop positions from the old song.";
+        L"Version 0.5.7 traces Revenge Redux Bank 01 playback rates directly from its 210-entry ROM SFX script-pointer table and applies each waveform's coarse and fine tuning. Records without a fixed script reference remain unknown instead of being guessed.";
     MessageBoxW(gApp.mainWindow, text, kAppTitle, MB_OK | MB_ICONINFORMATION);
 }
 
