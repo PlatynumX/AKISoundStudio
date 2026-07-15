@@ -1,0 +1,42 @@
+cmake_minimum_required(VERSION 3.20)
+project(AKISoundStudio VERSION 0.5.4 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_library(aki_core
+    src/AkiCore.cpp
+    src/AkiCore.h
+)
+target_include_directories(aki_core PUBLIC src)
+if(MSVC)
+    target_compile_options(aki_core PRIVATE /W4 /permissive- /EHsc)
+else()
+    target_compile_options(aki_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(WIN32)
+    add_executable(AKISoundStudio WIN32 src/App.cpp)
+    target_compile_definitions(AKISoundStudio PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(AKISoundStudio PRIVATE aki_core comctl32 comdlg32 winmm shell32)
+
+    add_custom_command(TARGET AKISoundStudio POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AKISoundStudio>/data"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/data/vpw2_sounds.csv"
+            "${CMAKE_SOURCE_DIR}/data/wm2k_sounds.csv"
+            "$<TARGET_FILE_DIR:AKISoundStudio>/data"
+        VERBATIM
+    )
+
+    install(TARGETS AKISoundStudio RUNTIME DESTINATION .)
+    install(DIRECTORY data DESTINATION .)
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(aki_core_smoke tests/core_smoke.cpp)
+    target_link_libraries(aki_core_smoke PRIVATE aki_core)
+    add_test(NAME core_synthetic COMMAND aki_core_smoke)
+endif()

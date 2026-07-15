@@ -1,0 +1,13 @@
+/build/
+/build-*/
+/.vs/
+/out/
+*.user
+*.suo
+*.VC.db
+*.wav
+*.z64
+*.v64
+*.n64
+*.rom
+*.bak

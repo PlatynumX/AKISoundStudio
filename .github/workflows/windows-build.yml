@@ -1,0 +1,40 @@
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run core smoke test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package/data | Out-Null
+          Copy-Item build/Release/AKISoundStudio.exe package/
+          Copy-Item data/*.csv package/data/
+          Copy-Item README.md,LICENSE package/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AKISoundStudio-v0.5.4-win64
+          path: |
+            package/AKISoundStudio.exe
+            package/data
+            package/README.md
+            package/LICENSE
+          if-no-files-found: error
