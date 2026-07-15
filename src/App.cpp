@@ -27,7 +27,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.5.7";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.5.9";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -101,6 +101,13 @@ struct AppState {
     std::vector<size_t> visibleIndices;
     bool romLoaded = false;
     bool dirty = false;
+
+    HWAVEOUT previewWaveOut = nullptr;
+    std::vector<int16_t> previewIntroSamples;
+    std::vector<int16_t> previewLoopSamples;
+    std::vector<int16_t> previewFullSamples;
+    WAVEHDR previewHeaders[2]{};
+    size_t previewHeaderCount = 0;
 };
 
 AppState gApp;
@@ -772,19 +779,30 @@ void ReplaceSelectedWav() {
     }
 
     const uint32_t expectedRate = SelectedRateOrZero();
+    bool resampledOnImport = false;
+    uint32_t originalRate = wav.sampleRate;
+    size_t originalSampleCount = wav.monoSamples.size();
     if (expectedRate != 0 && wav.sampleRate != expectedRate) {
-        std::wostringstream warning;
-        warning
-            << L"The WAV header is " << wav.sampleRate
-            << L" Hz, while the selected sound is currently set to "
+        std::wostringstream prompt;
+        prompt
+            << L"The WAV is " << wav.sampleRate << L" Hz, but this sound is set to "
             << expectedRate << L" Hz.\r\n\r\n"
-            << L"AKI Sound Studio does not resample during import. "
-            << L"The PCM samples will be encoded exactly as supplied, "
-            << L"and the game will play them according to its own sound "
-            << L"rate/tuning path.\r\n\r\nContinue anyway?";
-        if (MessageBoxW(gApp.mainWindow, warning.str().c_str(),
-                        kAppTitle, MB_YESNO | MB_ICONWARNING) != IDYES) {
-            return;
+            << L"Would you like AKI Sound Studio to resample it automatically?\r\n\r\n"
+            << L"Yes: resample to " << expectedRate
+            << L" Hz and scale the two loop-marker positions.\r\n"
+            << L"No: import the original PCM unchanged.\r\n"
+            << L"Cancel: do not import.";
+        const int choice = MessageBoxW(gApp.mainWindow, prompt.str().c_str(),
+                                       kAppTitle, MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (choice == IDCANCEL) return;
+        if (choice == IDYES) {
+            aki::WavPcm16 converted;
+            if (!aki::ResampleWavPcm16(wav, expectedRate, converted, error)) {
+                ShowError(L"Automatic resampling failed:\r\n\r\n" + Utf8ToWide(error));
+                return;
+            }
+            wav = std::move(converted);
+            resampledOnImport = true;
         }
     }
 
@@ -815,10 +833,16 @@ void ReplaceSelectedWav() {
            << result.encodedBytes << L" VADPCM bytes; rebuilt TBL "
            << result.rebuiltTblBytes << L" / " << result.allowedTblCapacityBytes
            << L" bytes" << (result.sizeOverrideUsed ? L" (expert override)" : L"");
+    if (resampledOnImport) {
+        status << L"; resampled " << originalRate << L" Hz / "
+               << originalSampleCount << L" samples to " << wav.sampleRate
+               << L" Hz / " << wav.monoSamples.size() << L" samples";
+    }
     if (result.loopEnabled) {
         status << L"; Wavosaur/WAV loop points "
                << result.loopStart << L"-" << result.loopEnd
-               << L" imported and rebuilt";
+               << (resampledOnImport ? L" scaled, imported, and rebuilt"
+                                     : L" imported and rebuilt");
     } else {
         status << L"; no WAV loop points, target loop disabled";
     }
@@ -869,6 +893,53 @@ void SavePatchedRom() {
     SetStatus(L"Patched ROM saved with repaired N64 CRC.");
 }
 
+void ReleasePreviewPlayback() {
+    PlaySoundW(nullptr, nullptr, 0);
+    if (gApp.previewWaveOut != nullptr) {
+        waveOutReset(gApp.previewWaveOut);
+        for (size_t i = 0; i < 2; ++i) {
+            if ((gApp.previewHeaders[i].dwFlags & WHDR_PREPARED) != 0) {
+                waveOutUnprepareHeader(gApp.previewWaveOut,
+                                       &gApp.previewHeaders[i],
+                                       sizeof(WAVEHDR));
+            }
+        }
+        waveOutClose(gApp.previewWaveOut);
+        gApp.previewWaveOut = nullptr;
+    }
+    gApp.previewHeaderCount = 0;
+    gApp.previewHeaders[0] = {};
+    gApp.previewHeaders[1] = {};
+    gApp.previewIntroSamples.clear();
+    gApp.previewLoopSamples.clear();
+    gApp.previewFullSamples.clear();
+}
+
+bool QueuePreviewBuffer(WAVEHDR& header,
+                        std::vector<int16_t>& samples,
+                        DWORD flags,
+                        DWORD loops,
+                        std::wstring& error) {
+    if (samples.empty()) return true;
+    header = {};
+    header.lpData = reinterpret_cast<LPSTR>(samples.data());
+    header.dwBufferLength = static_cast<DWORD>(samples.size() * sizeof(int16_t));
+    header.dwFlags = flags;
+    header.dwLoops = loops;
+    MMRESULT result = waveOutPrepareHeader(gApp.previewWaveOut, &header, sizeof(header));
+    if (result != MMSYSERR_NOERROR) {
+        error = L"Windows could not prepare the preview audio buffer.";
+        return false;
+    }
+    ++gApp.previewHeaderCount;
+    result = waveOutWrite(gApp.previewWaveOut, &header, sizeof(header));
+    if (result != MMSYSERR_NOERROR) {
+        error = L"Windows could not queue the preview audio buffer.";
+        return false;
+    }
+    return true;
+}
+
 void PlaySelected() {
     const auto selected = SelectedSoundIndex();
     if (!selected) {
@@ -882,19 +953,78 @@ void PlaySelected() {
     }
 
     const auto& sound = gApp.rom.sounds[*selected];
-    const std::filesystem::path tempDirectory = std::filesystem::temp_directory_path() / L"AKISoundStudio";
-    std::error_code ec;
-    std::filesystem::create_directories(tempDirectory, ec);
-    gApp.temporaryPreview = tempDirectory / L"preview.wav";
-
-    std::string error;
-    if (!aki::ExportSoundToWav(gApp.rom, sound, sampleRate, gApp.temporaryPreview, error)) {
-        ShowError(Utf8ToWide(error));
+    std::string decodeError;
+    auto samples = aki::DecodeSelectedSound(gApp.rom, sound, decodeError);
+    if (!decodeError.empty() || samples.empty()) {
+        ShowError(decodeError.empty() ? L"The selected sound decoded to no samples."
+                                      : Utf8ToWide(decodeError));
         return;
     }
-    PlaySoundW(nullptr, nullptr, 0);
-    if (!PlaySoundW(gApp.temporaryPreview.c_str(), nullptr, SND_ASYNC | SND_FILENAME | SND_NODEFAULT)) {
-        ShowError(L"Windows could not play the temporary WAV file.");
+
+    ReleasePreviewPlayback();
+
+    WAVEFORMATEX format{};
+    format.wFormatTag = WAVE_FORMAT_PCM;
+    format.nChannels = 1;
+    format.nSamplesPerSec = sampleRate;
+    format.wBitsPerSample = 16;
+    format.nBlockAlign = sizeof(int16_t);
+    format.nAvgBytesPerSec = sampleRate * format.nBlockAlign;
+
+    MMRESULT result = waveOutOpen(&gApp.previewWaveOut,
+                                  WAVE_MAPPER,
+                                  &format,
+                                  0,
+                                  0,
+                                  CALLBACK_NULL);
+    if (result != MMSYSERR_NOERROR) {
+        gApp.previewWaveOut = nullptr;
+        ShowError(L"Windows could not open the audio output device.");
+        return;
+    }
+
+    const bool hasValidLoop = sound.loopControlOffset != 0 &&
+                              sound.loopStart < sound.loopEnd &&
+                              sound.loopStart < samples.size();
+    std::wstring playbackError;
+    if (hasValidLoop) {
+        const size_t loopStart = std::min<size_t>(sound.loopStart, samples.size());
+        const size_t loopEnd = std::min<size_t>(sound.loopEnd, samples.size());
+        if (loopStart < loopEnd) {
+            gApp.previewIntroSamples.assign(samples.begin(), samples.begin() + loopStart);
+            gApp.previewLoopSamples.assign(samples.begin() + loopStart,
+                                           samples.begin() + loopEnd);
+
+            if (!QueuePreviewBuffer(gApp.previewHeaders[0],
+                                    gApp.previewIntroSamples,
+                                    0,
+                                    0,
+                                    playbackError) ||
+                !QueuePreviewBuffer(gApp.previewHeaders[1],
+                                    gApp.previewLoopSamples,
+                                    WHDR_BEGINLOOP | WHDR_ENDLOOP,
+                                    0xFFFFFFFFU,
+                                    playbackError)) {
+                ReleasePreviewPlayback();
+                ShowError(playbackError);
+                return;
+            }
+            SetStatus(L"Loop-previewing Bank " + Utf8ToWide(aki::Hex4(sound.bankId)) +
+                      L" / " + Utf8ToWide(aki::Hex4(sound.soundId)) +
+                      L" at " + std::to_wstring(sampleRate) + L" Hz; markers " +
+                      std::to_wstring(loopStart) + L"-" + std::to_wstring(loopEnd) + L".");
+            return;
+        }
+    }
+
+    gApp.previewFullSamples = std::move(samples);
+    if (!QueuePreviewBuffer(gApp.previewHeaders[0],
+                            gApp.previewFullSamples,
+                            0,
+                            0,
+                            playbackError)) {
+        ReleasePreviewPlayback();
+        ShowError(playbackError);
         return;
     }
     SetStatus(L"Playing Bank " + Utf8ToWide(aki::Hex4(sound.bankId)) + L" / " +
@@ -902,7 +1032,7 @@ void PlaySelected() {
 }
 
 void StopPlayback() {
-    PlaySoundW(nullptr, nullptr, 0);
+    ReleasePreviewPlayback();
     SetStatus(L"Playback stopped.");
 }
 
@@ -913,7 +1043,7 @@ void OpenExportFolder() {
 
 void ShowAbout() {
     const wchar_t* text =
-        L"AKI Sound Studio 0.5.7\r\n\r\n"
+        L"AKI Sound Studio 0.5.9\r\n\r\n"
         L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, and WCW/nWo Revenge Redux.\r\n\r\n"
         L"Current features:\r\n"
         L"• Stock and compatible-hack ROM detection\r\n"
@@ -923,7 +1053,7 @@ void ShowAbout() {
         L"• Wavosaur-compatible two-point WAV loops with rebuilt ADPCM loop state\r\n"
         L"• Hack profile CSV import/export and relocated-bank auto-detection\r\n"
         L"• Big-endian .z64 save-as with CIC-6102 CRC repair\r\n\r\n"
-        L"Version 0.5.7 traces Revenge Redux Bank 01 playback rates directly from its 210-entry ROM SFX script-pointer table and applies each waveform's coarse and fine tuning. Records without a fixed script reference remain unknown instead of being guessed.";
+        L"Version 0.5.9 adds marker-aware preview playback: the intro plays once, then the sound loops continuously between its two stored loop points until Stop is pressed. Revenge Redux Bank 01 rates remain traced from ROM playback scripts and waveform tuning.";
     MessageBoxW(gApp.mainWindow, text, kAppTitle, MB_OK | MB_ICONINFORMATION);
 }
 
@@ -1133,7 +1263,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             return 0;
 
         case WM_DESTROY:
-            PlaySoundW(nullptr, nullptr, 0);
+            ReleasePreviewPlayback();
             PostQuitMessage(0);
             return 0;
     }

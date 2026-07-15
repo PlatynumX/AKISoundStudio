@@ -186,6 +186,13 @@ std::vector<int16_t> DecodeSelectedSound(const LoadedRom& rom, const SoundRecord
 bool ReadPcm16Wav(const std::filesystem::path& path,
                   WavPcm16& wav,
                   std::string& error);
+
+// High-quality mono PCM resampling used by the import workflow. Loop points
+// are scaled to the new sample timeline and remain end-exclusive.
+bool ResampleWavPcm16(const WavPcm16& input,
+                      uint32_t targetSampleRate,
+                      WavPcm16& output,
+                      std::string& error);
 bool EncodePcmWithOriginalBook(const SoundRecord& sound,
                                const std::vector<int16_t>& samples,
                                std::vector<uint8_t>& encoded,

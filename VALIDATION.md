@@ -1,4 +1,4 @@
-# Validation log - AKI Sound Studio v0.5.7
+# Validation log - AKI Sound Studio v0.5.9
 
 Validated in the Linux build environment with the platform-independent core smoke test.
 
@@ -88,7 +88,7 @@ Validated in the Linux build environment with the platform-independent core smok
 - Full Redux parser/replacement smoke test verifies shifted Bank 00 label `0033 = cheering` and verifies changed Bank 01 record `005F` remains unlabeled.
 
 
-## v0.5.7 Revenge Redux ROM rate trace
+## v0.5.9 Revenge Redux ROM rate trace
 
 - Parsed the source script pointer table at ROM `0x00030ACC` as 210 pointers.
 - All 210 scripts resolved inside ROM `0x0002FAE0-0x00030AB8` and parsed without an unknown/truncated opcode.
@@ -97,3 +97,10 @@ Validated in the Linux build environment with the platform-independent core smok
 - Added signed coarse-semitone and fine-cent parsing from PtrTablesV2 header pointers `+0x24` and `+0x28`.
 - Regression checks: `01/0001 = 11089 Hz` with +10 cents; `01/0031 = 20812 Hz` with +2 semitones; `01/0044 = 33038 Hz`; `01/005F = 31183 Hz`; `01/005A` remains untraced.
 - Full Redux parse/repack test still parses 245 records and preserves nonstandard tail records `0093/0094`.
+
+
+## v0.5.9 resampling regression
+
+- 44,100 Hz mono PCM converted to 22,050 Hz with duration preserved.
+- Two-point loop markers scaled from 882-3528 to 441-1764.
+- GCC core build and smoke test passed.

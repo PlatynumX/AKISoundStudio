@@ -1,4 +1,4 @@
-# AKI Sound Studio v0.5.7
+# AKI Sound Studio v0.5.9
 
 Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, and **WCW/nWo Revenge Redux**.
 
@@ -23,14 +23,14 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pr
 
 ## Android/Termux repository updater
 
-Place `AKISoundStudio-v0.5.7-source-revenge-redux-rates.zip` and `update_aki_sound_studio_v057_revenge_redux_rates_termux.sh` on the phone, then run:
+Place `AKISoundStudio-v0.5.9-source-revenge-redux-rates.zip` and `update_aki_sound_studio_v057_revenge_redux_rates_termux.sh` on the phone, then run:
 
 ```bash
 termux-setup-storage
 bash ~/storage/downloads/update_aki_sound_studio_v057_revenge_redux_rates_termux.sh
 ```
 
-The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.5.7-win64.zip`.
+The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.5.9-win64.zip`.
 
 ## Editable list entries
 
@@ -112,7 +112,7 @@ Use **Tools -> Auto-detect sound locations** when a ROM hack still uses AKI `N64
 - See `REVENGE_REDUX_WM2K_COMPARISON.md` for the comparison method and corrected mapping summary.
 
 
-## v0.5.7 Revenge Redux ROM rate trace
+## v0.5.9 Revenge Redux ROM rate trace
 
 - Traces the 210 source-resident Redux SFX scripts referenced by the pointer table at ROM `0x00030ACC`.
 - Parses opcode `0x81` as a direct Bank 01 waveform selector and collects every pitch key used with that waveform.
@@ -120,5 +120,14 @@ Use **Tools -> Auto-detect sound locations** when a ROM hack still uses AKI `N64
 - Reads the PtrTablesV2 coarse-semitone byte table at header `+0x24` and the signed fine-cents byte at the start of each four-byte tuning entry referenced by header `+0x28`.
 - Applies the engine formula `11025 * 2^((key - 0x1F + coarse + fine/100) / 12)`. Multiple ROM pitch uses are retained as alternate rates.
 - Displays the traced pitch keys, coarse semitones, and fine cents in the sound details panel and exports them in metadata CSV.
-- Bank 00 remains without one fixed per-wave rate because it is the instrument/music bank and its samples are played across musical notes; v0.5.7 does not pretend those note-dependent samples have a single ROM rate.
+- Bank 00 remains without one fixed per-wave rate because it is the instrument/music bank and its samples are played across musical notes; v0.5.9 does not pretend those note-dependent samples have a single ROM rate.
 - See `REVENGE_REDUX_RATE_BACKTRACE.md` for the binary trace and unmapped record list. `REVENGE_REDUX_RATE_BACKTRACE.csv` contains all 149 Bank 01 rows with keys, tuning, rates, and trace status.
+
+## v0.5.9 loop-marker preview playback
+
+Preview playback now honors the selected sound's two stored loop points. Audio before the loop start plays once; the start-to-end region then repeats until **Stop** is pressed. Sounds without valid loop points continue to play once normally. This uses Windows `waveOut` buffers rather than `PlaySound`, which only supports whole-file looping and ignores WAV `smpl` markers.
+
+
+## v0.5.9 automatic import resampling
+
+When an imported WAV rate differs from the selected sound rate, the app now offers to resample automatically, import unchanged, or cancel. Automatic conversion uses windowed-sinc interpolation with anti-alias filtering and scales WAV `smpl` loop start/end points to the new sample timeline before VADPCM encoding.

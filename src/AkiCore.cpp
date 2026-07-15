@@ -1808,6 +1808,112 @@ bool ReadPcm16Wav(const std::filesystem::path& path,
     return true;
 }
 
+bool ResampleWavPcm16(const WavPcm16& input,
+                      uint32_t targetSampleRate,
+                      WavPcm16& output,
+                      std::string& error) {
+    error.clear();
+    output = {};
+    if (input.sampleRate == 0 || targetSampleRate == 0) {
+        error = "Both source and target sample rates must be non-zero.";
+        return false;
+    }
+    if (input.monoSamples.empty()) {
+        error = "The WAV contains no PCM samples to resample.";
+        return false;
+    }
+    if (targetSampleRate > 384000U) {
+        error = "The target sample rate exceeds the supported 384000 Hz limit.";
+        return false;
+    }
+    if (input.sampleRate == targetSampleRate) {
+        output = input;
+        return true;
+    }
+
+    const long double ratio = static_cast<long double>(targetSampleRate) /
+                              static_cast<long double>(input.sampleRate);
+    const uint64_t outputCount64 = std::max<uint64_t>(
+        1U, static_cast<uint64_t>(std::llround(
+                static_cast<long double>(input.monoSamples.size()) * ratio)));
+    if (outputCount64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max()) ||
+        outputCount64 > 0x7FFFFFFFU) {
+        error = "The resampled WAV would be too large.";
+        return false;
+    }
+
+    output = input;
+    output.sampleRate = targetSampleRate;
+    output.sourceChannels = 1;
+    output.monoSamples.assign(static_cast<size_t>(outputCount64), 0);
+
+    // Windowed-sinc interpolation with an anti-alias cutoff for downsampling.
+    // Sixteen source samples on either side gives substantially cleaner music
+    // conversion than linear interpolation while remaining quick for imports.
+    constexpr int kRadius = 16;
+    constexpr long double kPi = 3.141592653589793238462643383279502884L;
+    const long double cutoff = std::min<long double>(1.0L, ratio);
+    const long double sourcePerOutput = 1.0L / ratio;
+    const auto sinc = [kPi](long double x) {
+        if (std::fabs(x) < 1.0e-12L) return 1.0L;
+        const long double px = kPi * x;
+        return std::sin(px) / px;
+    };
+
+    for (size_t outIndex = 0; outIndex < output.monoSamples.size(); ++outIndex) {
+        const long double sourcePosition =
+            (static_cast<long double>(outIndex) + 0.5L) * sourcePerOutput - 0.5L;
+        const int64_t center = static_cast<int64_t>(std::floor(sourcePosition));
+        long double weighted = 0.0L;
+        long double weightSum = 0.0L;
+        for (int tap = -kRadius + 1; tap <= kRadius; ++tap) {
+            const int64_t sourceIndex = center + tap;
+            if (sourceIndex < 0 ||
+                sourceIndex >= static_cast<int64_t>(input.monoSamples.size())) {
+                continue;
+            }
+            const long double distance = sourcePosition -
+                                         static_cast<long double>(sourceIndex);
+            const long double normalized = distance / static_cast<long double>(kRadius);
+            if (std::fabs(normalized) >= 1.0L) continue;
+            // Blackman window.
+            const long double window = 0.42L +
+                0.5L * std::cos(kPi * normalized) +
+                0.08L * std::cos(2.0L * kPi * normalized);
+            const long double weight = cutoff * sinc(distance * cutoff) * window;
+            weighted += static_cast<long double>(
+                            input.monoSamples[static_cast<size_t>(sourceIndex)]) * weight;
+            weightSum += weight;
+        }
+        if (std::fabs(weightSum) > 1.0e-18L) weighted /= weightSum;
+        const long long rounded = std::llround(weighted);
+        output.monoSamples[outIndex] = static_cast<int16_t>(std::clamp<long long>(
+            rounded,
+            std::numeric_limits<int16_t>::min(),
+            std::numeric_limits<int16_t>::max()));
+    }
+
+    if (input.hasLoop) {
+        const auto scalePoint = [ratio](uint32_t point) -> uint32_t {
+            const long double scaled = static_cast<long double>(point) * ratio;
+            return static_cast<uint32_t>(std::llround(scaled));
+        };
+        output.loopStart = std::min<uint32_t>(
+            scalePoint(input.loopStart),
+            static_cast<uint32_t>(output.monoSamples.size() - 1U));
+        output.loopEnd = std::min<uint32_t>(
+            scalePoint(input.loopEnd),
+            static_cast<uint32_t>(output.monoSamples.size()));
+        if (output.loopEnd <= output.loopStart) {
+            output.loopEnd = std::min<uint32_t>(
+                output.loopStart + 1U,
+                static_cast<uint32_t>(output.monoSamples.size()));
+        }
+        output.hasLoop = output.loopStart < output.loopEnd;
+    }
+    return true;
+}
+
 bool EncodePcmWithOriginalBook(const SoundRecord& sound,
                                const std::vector<int16_t>& samples,
                                std::vector<uint8_t>& encoded,

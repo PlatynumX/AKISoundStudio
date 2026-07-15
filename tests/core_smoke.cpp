@@ -104,6 +104,34 @@ int main(int argc, char** argv) {
         return Fail("confidence text");
     }
 
+    // Import resampling must preserve duration closely and move the two loop
+    // points onto the target-rate sample timeline.
+    aki::WavPcm16 sourceWav;
+    sourceWav.sampleRate = 44100;
+    sourceWav.sourceChannels = 1;
+    sourceWav.monoSamples.resize(4410);
+    for (size_t i = 0; i < sourceWav.monoSamples.size(); ++i) {
+        sourceWav.monoSamples[i] = static_cast<int16_t>(
+            std::llround(12000.0 * std::sin(2.0 * 3.14159265358979323846 *
+                                           440.0 * static_cast<double>(i) / 44100.0)));
+    }
+    sourceWav.loopMetadataPresent = true;
+    sourceWav.hasLoop = true;
+    sourceWav.loopStart = 882;
+    sourceWav.loopEnd = 3528;
+    aki::WavPcm16 resampledWav;
+    std::string resampleError;
+    if (!aki::ResampleWavPcm16(sourceWav, 22050, resampledWav, resampleError)) {
+        return Fail("automatic WAV resampling failed: " + resampleError);
+    }
+    if (resampledWav.sampleRate != 22050 ||
+        resampledWav.monoSamples.size() != 2205 ||
+        resampledWav.loopStart != 441 ||
+        resampledWav.loopEnd != 1764 ||
+        !resampledWav.hasLoop) {
+        return Fail("automatic WAV resampling did not scale samples/loop points");
+    }
+
     // v0.5.2 regression guard: LoadedRom owns customProfile while profile points
     // at it. Copying or moving a LoadedRom must rebind that pointer to the
     // destination object. The v0.5/v0.5.1 Win32 loader moved a freshly loaded
