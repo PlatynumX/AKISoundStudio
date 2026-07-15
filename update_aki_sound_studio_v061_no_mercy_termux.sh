@@ -1,10 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -Eeuo pipefail
 
-ZIP_NAME="AKISoundStudio-v0.5.9-source-auto-resample.zip"
+ZIP_NAME="AKISoundStudio-v0.6.1-source-no-mercy.zip"
 REPO_NAME="AKISoundStudio"
-WORK="$HOME/aki-sound-studio-v057-update"
-ARTIFACT="AKISoundStudio-v0.5.9-win64"
+WORK="$HOME/aki-sound-studio-v061-update"
+ARTIFACT="AKISoundStudio-v0.6.1-win64"
 WORKFLOW="windows-build.yml"
 DESCRIPTION="AKI N64 wrestling game sound-bank editor"
 LOG_FILE=""
@@ -60,7 +60,7 @@ for output_dir in \
 done
 [[ -n "$DOWNLOADS" ]] || fail "No writable Android download folder was found. Run termux-setup-storage, grant storage permission, and rerun this script."
 
-LOG_FILE="$DOWNLOADS/AKISoundStudio-v0.5.9-termux-update.log"
+LOG_FILE="$DOWNLOADS/AKISoundStudio-v0.6.1-termux-update.log"
 : > "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -104,8 +104,8 @@ resolve_source_zip() {
       candidates+=("$candidate")
     done < <(
       find "$root" -maxdepth 5 -type f \
-        \( -iname 'AKISoundStudio-v0.5.9-source*.zip' \
-           -o -iname '*AKISoundStudio*v0.5.9*source*.zip' \) \
+        \( -iname 'AKISoundStudio-v0.6.1-source*.zip' \
+           -o -iname '*AKISoundStudio*v0.6.1*source*.zip' \) \
         -print0 2>/dev/null
     )
   done
@@ -134,7 +134,7 @@ resolve_source_zip() {
   return 1
 }
 
-ZIP_PATH="$(resolve_source_zip)" || fail "Could not find the AKISoundStudio v0.5.9 source ZIP anywhere in shared phone storage."
+ZIP_PATH="$(resolve_source_zip)" || fail "Could not find the AKISoundStudio v0.6.1 source ZIP anywhere in shared phone storage."
 [[ -f "$ZIP_PATH" ]] || fail "Source ZIP resolved to an invalid path: $ZIP_PATH"
 
 info "Checking GitHub authentication"
@@ -199,16 +199,16 @@ git config user.email "$OWNER@users.noreply.github.com"
 git config core.autocrlf false
 
 # Replace the checked-out source tree while preserving only .git. This updates
-# main in place and avoids creating a v0.5.9 or any other separate branch.
+# main in place and avoids creating a v0.6.1 or any other separate branch.
 find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
 cp -a "$SOURCE_ROOT"/. .
 rm -rf build build-linux build-clang
 
 git add -A
 if git diff --cached --quiet; then
-  info "The main branch already contains this v0.5.9 source"
+  info "The main branch already contains this v0.6.1 source"
 else
-  git commit -m "AKI Sound Studio v0.5.9"
+  git commit -m "AKI Sound Studio v0.6.1"
 fi
 HEAD_SHA="$(git rev-parse HEAD)"
 
@@ -267,7 +267,7 @@ fi
 
 info "Watching GitHub Actions run $RUN_ID"
 if ! gh run watch "$RUN_ID" --repo "$REPO" --exit-status; then
-  BUILD_LOG="$DOWNLOADS/AKISoundStudio-v0.5.9-failed-build-$RUN_ID.log"
+  BUILD_LOG="$DOWNLOADS/AKISoundStudio-v0.6.1-failed-build-$RUN_ID.log"
   gh run view "$RUN_ID" --repo "$REPO" --log > "$BUILD_LOG" 2>&1 || true
   fail "Windows build failed. Build log saved to: $BUILD_LOG"
 fi

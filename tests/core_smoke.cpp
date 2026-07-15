@@ -132,6 +132,22 @@ int main(int argc, char** argv) {
         return Fail("automatic WAV resampling did not scale samples/loop points");
     }
 
+    // Import gain must alter PCM amplitude without moving the two loop points.
+    aki::GainResult gainResult;
+    std::string gainError;
+    const uint32_t gainLoopStart = resampledWav.loopStart;
+    const uint32_t gainLoopEnd = resampledWav.loopEnd;
+    if (!aki::ApplyWavGain(resampledWav, 6.0, true, gainResult, gainError)) {
+        return Fail("automatic WAV gain failed: " + gainError);
+    }
+    if (resampledWav.loopStart != gainLoopStart ||
+        resampledWav.loopEnd != gainLoopEnd ||
+        gainResult.appliedDb <= 0.0 ||
+        gainResult.peakAfter <= gainResult.peakBefore ||
+        gainResult.clippedSamples != 0) {
+        return Fail("WAV gain changed loop points or failed clipping-safe amplification");
+    }
+
     // v0.5.2 regression guard: LoadedRom owns customProfile while profile points
     // at it. Copying or moving a LoadedRom must rebind that pointer to the
     // destination object. The v0.5/v0.5.1 Win32 loader moved a freshly loaded
@@ -209,7 +225,7 @@ int main(int argc, char** argv) {
         return Fail("safe TBL padding overwrote the protected object");
     }
 
-    // Wavosaur-compatible two-point loop round-trip plus allocation of a new
+    // two-point loop round-trip plus allocation of a new
     // ALADPCMloop block for a previously non-looped target.
     const auto loopWavPath =
         std::filesystem::temp_directory_path() /
@@ -255,7 +271,7 @@ int main(int argc, char** argv) {
 
     if (argc == 1) {
         std::cout << "Core utility smoke tests passed.\n";
-        std::cout << "Pass a NWXE, NA2J, or Revenge Redux NW2E ROM path to run the full parser/decoder smoke test.\n";
+        std::cout << "Pass a NWXE, NA2J, Revenge Redux NW2E, or No Mercy NW4E ROM path to run the full parser/decoder smoke test.\n";
         return 0;
     }
 
@@ -283,6 +299,9 @@ int main(int argc, char** argv) {
             break;
         case aki::GameId::RevengeRedux:
             labelFile = dataDirectory / "revenge_redux_sounds.csv";
+            break;
+        case aki::GameId::NoMercy:
+            labelFile = dataDirectory / "no_mercy_sounds.csv";
             break;
         default:
             return Fail("no label database for detected profile");
@@ -348,6 +367,17 @@ int main(int argc, char** argv) {
             return Fail("VPW2 wrestler-voice reference/ROM rate evidence failed");
         }
         target = thunder;
+    } else if (rom.profile->id == aki::GameId::NoMercy) {
+        if (rom.sounds.size() != 293) return Fail("No Mercy did not parse all 293 waveform records");
+        size_t traced = 0;
+        for (const auto& sound : rom.sounds) {
+            if (sound.label.rate.confidence == aki::RateConfidence::RomDerived) ++traced;
+        }
+        if (traced == 0) return Fail("No Mercy ROM pitch trace produced no rates");
+        for (const auto& sound : rom.sounds) {
+            if (sound.bankId == 1 && sound.soundId == 0x005F) { target = &sound; break; }
+        }
+        if (!target) target = &rom.sounds.front();
     } else if (rom.profile->id == aki::GameId::RevengeRedux) {
         if (rom.sounds.size() != 245) {
             return Fail("Revenge Redux did not parse all 245 bank records");

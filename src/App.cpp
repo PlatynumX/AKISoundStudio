@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cwchar>
 #include <cwctype>
 #include <filesystem>
@@ -27,7 +28,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.5.9";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.6.0";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -51,6 +52,8 @@ constexpr int IDC_FORCE_OVERRIDE = 1019;
 constexpr int IDC_OVERRIDE_LABEL = 1020;
 constexpr int IDC_NAME = 1021;
 constexpr int IDC_APPLY_METADATA = 1022;
+constexpr int IDC_IMPORT_GAIN = 1023;
+constexpr int IDC_PREVENT_CLIP = 1024;
 
 constexpr int ID_FILE_OPEN = 40001;
 constexpr int ID_FILE_EXPORT_WAV = 40002;
@@ -82,6 +85,8 @@ struct AppState {
     HWND stopButton = nullptr;
     HWND exportWavButton = nullptr;
     HWND replaceWavButton = nullptr;
+    HWND importGainEdit = nullptr;
+    HWND preventClipCheck = nullptr;
     HWND overrideEnableCheck = nullptr;
     HWND ctlOverrideEndEdit = nullptr;
     HWND tblOverrideEndEdit = nullptr;
@@ -180,7 +185,8 @@ std::filesystem::path FindDataDirectory(const std::filesystem::path& executableD
     for (const auto& candidate : candidates) {
         if (std::filesystem::exists(candidate / L"vpw2_sounds.csv") &&
             std::filesystem::exists(candidate / L"wm2k_sounds.csv") &&
-            std::filesystem::exists(candidate / L"revenge_redux_sounds.csv")) {
+            std::filesystem::exists(candidate / L"revenge_redux_sounds.csv") &&
+            std::filesystem::exists(candidate / L"no_mercy_sounds.csv")) {
             return candidate;
         }
     }
@@ -196,7 +202,7 @@ std::wstring OpenRomDialog() {
     dialog.lpstrFile = filename;
     dialog.nMaxFile = static_cast<DWORD>(std::size(filename));
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
-    dialog.lpstrTitle = L"Open VPW2, WrestleMania 2000, or Revenge Redux ROM";
+    dialog.lpstrTitle = L"Open VPW2, WrestleMania 2000, Revenge Redux, or No Mercy ROM";
     if (!GetOpenFileNameW(&dialog)) return {};
     return filename;
 }
@@ -276,6 +282,8 @@ void EnableRomActions(bool enabled) {
     EnableWindow(gApp.stopButton, enabled);
     EnableWindow(gApp.exportWavButton, enabled);
     EnableWindow(gApp.replaceWavButton, enabled);
+    EnableWindow(gApp.importGainEdit, enabled);
+    EnableWindow(gApp.preventClipCheck, enabled);
     EnableWindow(gApp.overrideEnableCheck, enabled);
     EnableWindow(gApp.ctlOverrideEndEdit, enabled);
     EnableWindow(gApp.tblOverrideEndEdit, enabled);
@@ -558,6 +566,9 @@ bool LoadLabelsForCurrentRom(std::string& error) {
         case aki::GameId::RevengeRedux:
             filename = L"revenge_redux_sounds.csv";
             break;
+        case aki::GameId::NoMercy:
+            filename = L"no_mercy_sounds.csv";
+            break;
         default:
             error = "No label database is configured for the selected game profile.";
             return false;
@@ -761,6 +772,20 @@ void ApplyMetadataEdit() {
 }
 
 
+bool ReadImportGain(double& gainDb) {
+    std::wstring text = TrimWide(GetWindowTextString(gApp.importGainEdit));
+    if (text.empty()) text = L"0";
+    wchar_t* end = nullptr;
+    gainDb = std::wcstod(text.c_str(), &end);
+    if (end == text.c_str() || (end && *end != L'\0') || !std::isfinite(gainDb) ||
+        gainDb < -60.0 || gainDb > 60.0) {
+        ShowError(L"Enter an import gain between -60.0 and +60.0 dB. Examples: 3, 6, 12, or 0.");
+        SetFocus(gApp.importGainEdit);
+        return false;
+    }
+    return true;
+}
+
 void ReplaceSelectedWav() {
     const auto selected = SelectedSoundIndex();
     if (!selected) {
@@ -806,6 +831,18 @@ void ReplaceSelectedWav() {
         }
     }
 
+    double importGainDb = 0.0;
+    if (!ReadImportGain(importGainDb)) return;
+    aki::GainResult gainResult;
+    const bool preventClipping =
+        Button_GetCheck(gApp.preventClipCheck) == BST_CHECKED;
+    if (std::abs(importGainDb) > 0.0001) {
+        if (!aki::ApplyWavGain(wav, importGainDb, preventClipping, gainResult, error)) {
+            ShowError(L"Import amplification failed:\r\n\r\n" + Utf8ToWide(error));
+            return;
+        }
+    }
+
     aki::BankWriteOptions writeOptions;
     std::wstring optionError;
     if (!CurrentBankWriteOptions(writeOptions, optionError)) {
@@ -838,8 +875,18 @@ void ReplaceSelectedWav() {
                << originalSampleCount << L" samples to " << wav.sampleRate
                << L" Hz / " << wav.monoSamples.size() << L" samples";
     }
+    if (std::abs(importGainDb) > 0.0001) {
+        status << L"; import gain " << std::fixed << std::setprecision(2)
+               << gainResult.appliedDb << L" dB";
+        if (gainResult.limitedToPreventClipping) {
+            status << L" (requested " << gainResult.requestedDb
+                   << L" dB, limited to prevent clipping)";
+        } else if (gainResult.clippedSamples != 0) {
+            status << L" (" << gainResult.clippedSamples << L" samples clipped)";
+        }
+    }
     if (result.loopEnabled) {
-        status << L"; Wavosaur/WAV loop points "
+        status << L"; WAV loop markers "
                << result.loopStart << L"-" << result.loopEnd
                << (resampledOnImport ? L" scaled, imported, and rebuilt"
                                      : L" imported and rebuilt");
@@ -1043,17 +1090,17 @@ void OpenExportFolder() {
 
 void ShowAbout() {
     const wchar_t* text =
-        L"AKI Sound Studio 0.5.9\r\n\r\n"
-        L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, and WCW/nWo Revenge Redux.\r\n\r\n"
+        L"AKI Sound Studio 0.6.0\r\n\r\n"
+        L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, WCW/nWo Revenge Redux, and WWF No Mercy.\r\n\r\n"
         L"Current features:\r\n"
         L"• Stock and compatible-hack ROM detection\r\n"
         L"• Searchable sound lists with editable names and rates\r\n"
         L"• WAV export, PCM WAV import, and Nintendo VADPCM encoding\r\n"
         L"• Bank-local TBL repacking with automatic safe-padding use and expert CTL/TBL end overrides\r\n"
-        L"• Wavosaur-compatible two-point WAV loops with rebuilt ADPCM loop state\r\n"
+        L"• two-point WAV loop markers with rebuilt ADPCM loop state\r\n"
         L"• Hack profile CSV import/export and relocated-bank auto-detection\r\n"
         L"• Big-endian .z64 save-as with CIC-6102 CRC repair\r\n\r\n"
-        L"Version 0.5.9 adds marker-aware preview playback: the intro plays once, then the sound loops continuously between its two stored loop points until Stop is pressed. Revenge Redux Bank 01 rates remain traced from ROM playback scripts and waveform tuning.";
+        L"Version 0.6.1 adds WWF No Mercy Rev 1 support with ROM-traced bank and sequence locations, ROM-derived playback rates where fixed script references exist, and labels copied only from exact decoded-audio matches to supported games.";
     MessageBoxW(gApp.mainWindow, text, kAppTitle, MB_OK | MB_ICONINFORMATION);
 }
 
@@ -1089,7 +1136,9 @@ void LayoutControls(HWND window, int width, int height) {
     MoveWindow(gApp.playButton, detailsX + 113, y + contentHeight - 140, 72, 26, TRUE);
     MoveWindow(gApp.stopButton, detailsX + 193, y + contentHeight - 140, 62, 26, TRUE);
     MoveWindow(gApp.exportWavButton, detailsX + 263, y + contentHeight - 140, 127, 26, TRUE);
-    MoveWindow(gApp.replaceWavButton, detailsX, y + contentHeight - 106, detailsWidth, 28, TRUE);
+    MoveWindow(gApp.replaceWavButton, detailsX, y + contentHeight - 106, 205, 28, TRUE);
+    MoveWindow(gApp.importGainEdit, detailsX + 213, y + contentHeight - 106, 88, 28, TRUE);
+    MoveWindow(gApp.preventClipCheck, detailsX + 307, y + contentHeight - 106, 83, 28, TRUE);
     MoveWindow(gApp.overrideLabel, detailsX, y + contentHeight - 70, 104, 24, TRUE);
     MoveWindow(gApp.overrideEnableCheck, detailsX + 106, y + contentHeight - 72, 74, 24, TRUE);
     MoveWindow(gApp.forceOverrideCheck, detailsX + 184, y + contentHeight - 72, 70, 24, TRUE);
@@ -1143,7 +1192,11 @@ void CreateMainControls(HWND window) {
     gApp.playButton = CreateControl(L"BUTTON", L"Play", BS_PUSHBUTTON | WS_TABSTOP, IDC_PLAY, window);
     gApp.stopButton = CreateControl(L"BUTTON", L"Stop", BS_PUSHBUTTON | WS_TABSTOP, IDC_STOP, window);
     gApp.exportWavButton = CreateControl(L"BUTTON", L"Export WAV...", BS_PUSHBUTTON | WS_TABSTOP, IDC_EXPORT_WAV, window);
-    gApp.replaceWavButton = CreateControl(L"BUTTON", L"Replace selected sound from WAV...", BS_PUSHBUTTON | WS_TABSTOP, IDC_REPLACE_WAV, window);
+    gApp.replaceWavButton = CreateControl(L"BUTTON", L"Replace from WAV...", BS_PUSHBUTTON | WS_TABSTOP, IDC_REPLACE_WAV, window);
+    gApp.importGainEdit = CreateControl(L"EDIT", L"0.0", ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, IDC_IMPORT_GAIN, window, WS_EX_CLIENTEDGE);
+    Edit_SetCueBannerText(gApp.importGainEdit, L"Gain dB");
+    gApp.preventClipCheck = CreateControl(L"BUTTON", L"Limit clip", BS_AUTOCHECKBOX | WS_TABSTOP, IDC_PREVENT_CLIP, window);
+    Button_SetCheck(gApp.preventClipCheck, BST_CHECKED);
     gApp.overrideLabel = CreateControl(L"STATIC", L"Expert override:", SS_LEFT | SS_NOPREFIX, IDC_OVERRIDE_LABEL, window);
     gApp.overrideEnableCheck = CreateControl(L"BUTTON", L"Enable", BS_AUTOCHECKBOX | WS_TABSTOP, IDC_OVERRIDE_ENABLE, window);
     gApp.ctlOverrideEndEdit = CreateControl(L"EDIT", L"", ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, IDC_CTL_OVERRIDE_END, window, WS_EX_CLIENTEDGE);
@@ -1151,12 +1204,12 @@ void CreateMainControls(HWND window) {
     gApp.forceOverrideCheck = CreateControl(L"BUTTON", L"Force", BS_AUTOCHECKBOX | WS_TABSTOP, IDC_FORCE_OVERRIDE, window);
     Edit_SetCueBannerText(gApp.ctlOverrideEndEdit, L"CTL end hex");
     Edit_SetCueBannerText(gApp.tblOverrideEndEdit, L"TBL end hex");
-    gApp.status = CreateControl(L"STATIC", L"Open a VPW2 or WM2000 ROM to begin.", SS_LEFT | SS_NOPREFIX,
+    gApp.status = CreateControl(L"STATIC", L"Open a supported AKI wrestling ROM to begin.", SS_LEFT | SS_NOPREFIX,
                                 IDC_STATUS, window);
 
     const HWND controls[]{gApp.openButton, gApp.saveRomButton, gApp.exportCsvButton, gApp.openFolderButton, gApp.romSummary,
                           gApp.bankCombo, gApp.searchEdit, gApp.soundList, gApp.detailsEdit, gApp.nameEdit, gApp.rateEdit,
-                          gApp.applyMetadataButton, gApp.playButton, gApp.stopButton, gApp.exportWavButton, gApp.replaceWavButton, gApp.overrideLabel, gApp.overrideEnableCheck, gApp.ctlOverrideEndEdit, gApp.tblOverrideEndEdit, gApp.forceOverrideCheck, gApp.status};
+                          gApp.applyMetadataButton, gApp.playButton, gApp.stopButton, gApp.exportWavButton, gApp.replaceWavButton, gApp.importGainEdit, gApp.preventClipCheck, gApp.overrideLabel, gApp.overrideEnableCheck, gApp.ctlOverrideEndEdit, gApp.tblOverrideEndEdit, gApp.forceOverrideCheck, gApp.status};
     for (HWND control : controls) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
 
     EnableRomActions(false);

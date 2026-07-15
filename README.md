@@ -1,17 +1,17 @@
-# AKI Sound Studio v0.5.9
+# AKI Sound Studio v0.6.0
 
-Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, and **WCW/nWo Revenge Redux**.
+Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, **WCW/nWo Revenge Redux**, and **WWF No Mercy (USA) Rev 1**.
 
 ## What works
 
-- Auto-detects WM2000 `NWXE`, VPW2 `NA2J`, and Revenge Redux `NW2E` ROMs.
+- Auto-detects WM2000 `NWXE`, VPW2 `NA2J`, Revenge Redux `NW2E`, and No Mercy Rev 1 `NW4E` ROMs.
 - Parses AKI `N64 PtrTablesV2` sound banks.
 - Decodes Nintendo VADPCM to 16-bit mono WAV.
 - Imports 16-bit PCM WAV replacements.
 - Encodes replacements back to Nintendo VADPCM using the original predictor book.
 - Rebuilds the whole bank-local TBL instead of requiring a replacement to fit the original sample slot.
 - Automatically uses only verified contiguous `00`/`FF` padding after the last waveform, stopping at the first real byte or configured CTL/TBL/sequence boundary.
-- Imports the two loop points saved by Wavosaur-compatible WAV files and rebuilds the 16-sample Nintendo ADPCM loop state. Markerless WAVs are non-looping and never inherit the old song's positions.
+- Imports the two loop points saved by WAV files and rebuilds the 16-sample Nintendo ADPCM loop state. Markerless WAVs are non-looping and never inherit the old song's positions.
 - Saves patched `.z64` ROMs and repairs N64 CRC1/CRC2.
 - Protects sequence/control data after a bank's exact last waveform in normal repack mode.
 - Supports Expert CTL/TBL end-offset overrides.
@@ -23,14 +23,14 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pr
 
 ## Android/Termux repository updater
 
-Place `AKISoundStudio-v0.5.9-source-revenge-redux-rates.zip` and `update_aki_sound_studio_v057_revenge_redux_rates_termux.sh` on the phone, then run:
+Place `AKISoundStudio-v0.6.0-source-import-gain.zip` and `update_aki_sound_studio_v060_import_gain_termux.sh` on the phone, then run:
 
 ```bash
 termux-setup-storage
-bash ~/storage/downloads/update_aki_sound_studio_v057_revenge_redux_rates_termux.sh
+bash ~/storage/downloads/update_aki_sound_studio_v060_import_gain_termux.sh
 ```
 
-The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.5.9-win64.zip`.
+The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.6.0-win64.zip`.
 
 ## Editable list entries
 
@@ -79,10 +79,10 @@ Use **Tools -> Auto-detect sound locations** when a ROM hack still uses AKI `N64
 - Fixes the false “too large” warning for modest replacements that fit in verified blank padding immediately after a bank’s last waveform.
 - Keeps the v0.4.1 sequence/control protection: automatic growth stops at the first nonblank byte and never crosses a configured sound-bank or sequence-object boundary.
 
-## v0.5.4 Wavosaur two-point loop fix
+## v0.5.4 two-point WAV loop fix
 
 - Treats looping as exactly two WAV loop points: **loop start** and **loop end**.
-- Reads the forward loop saved in standard WAV `smpl` metadata used by sampler-oriented editors such as Wavosaur.
+- Reads the forward loop saved in standard WAV `smpl` metadata used by sampler-oriented audio editors.
 - Uses those two positions exactly for the replacement waveform; the old song's numeric loop positions are never inherited.
 - A WAV without saved loop points is imported as non-looping and clears the target sound's old loop pointer.
 - Parses and writes the complete Nintendo `ALADPCMloop` record: start, end, repeat count, and sixteen signed decoder-state samples.
@@ -112,7 +112,16 @@ Use **Tools -> Auto-detect sound locations** when a ROM hack still uses AKI `N64
 - See `REVENGE_REDUX_WM2K_COMPARISON.md` for the comparison method and corrected mapping summary.
 
 
-## v0.5.9 Revenge Redux ROM rate trace
+## v0.6.1 WWF No Mercy Rev 1 support
+
+- Adds a built-in `NW4E` profile for WWF No Mercy (USA) Rev 1.
+- Traces three ROM banks: 85, 165, and 43 records, for 293 total sounds.
+- Uses ROM sequence objects for Banks 01 and 02 to derive playback rates from selector maps, pitch keys, and per-wave coarse/fine tuning. Sounds without fixed script references remain unknown.
+- Compares every decoded No Mercy waveform sample-for-sample against WM2000 and Revenge Redux. Only exact matches inherit labels; unmatched sounds remain blank and editable.
+- Removes editor-specific terminology: loop metadata is described simply as two WAV loop markers.
+- See `NO_MERCY_SOUND_TRACE.md` for offsets, ASM references, sequence objects, and comparison results.
+
+## v0.6.0 Revenge Redux ROM rate trace
 
 - Traces the 210 source-resident Redux SFX scripts referenced by the pointer table at ROM `0x00030ACC`.
 - Parses opcode `0x81` as a direct Bank 01 waveform selector and collects every pitch key used with that waveform.
@@ -120,14 +129,18 @@ Use **Tools -> Auto-detect sound locations** when a ROM hack still uses AKI `N64
 - Reads the PtrTablesV2 coarse-semitone byte table at header `+0x24` and the signed fine-cents byte at the start of each four-byte tuning entry referenced by header `+0x28`.
 - Applies the engine formula `11025 * 2^((key - 0x1F + coarse + fine/100) / 12)`. Multiple ROM pitch uses are retained as alternate rates.
 - Displays the traced pitch keys, coarse semitones, and fine cents in the sound details panel and exports them in metadata CSV.
-- Bank 00 remains without one fixed per-wave rate because it is the instrument/music bank and its samples are played across musical notes; v0.5.9 does not pretend those note-dependent samples have a single ROM rate.
+- Bank 00 remains without one fixed per-wave rate because it is the instrument/music bank and its samples are played across musical notes; v0.6.0 does not pretend those note-dependent samples have a single ROM rate.
 - See `REVENGE_REDUX_RATE_BACKTRACE.md` for the binary trace and unmapped record list. `REVENGE_REDUX_RATE_BACKTRACE.csv` contains all 149 Bank 01 rows with keys, tuning, rates, and trace status.
 
-## v0.5.9 loop-marker preview playback
+## v0.6.0 loop-marker preview playback
 
 Preview playback now honors the selected sound's two stored loop points. Audio before the loop start plays once; the start-to-end region then repeats until **Stop** is pressed. Sounds without valid loop points continue to play once normally. This uses Windows `waveOut` buffers rather than `PlaySound`, which only supports whole-file looping and ignores WAV `smpl` markers.
 
 
-## v0.5.9 automatic import resampling
+## v0.6.0 automatic import resampling
 
 When an imported WAV rate differs from the selected sound rate, the app now offers to resample automatically, import unchanged, or cancel. Automatic conversion uses windowed-sinc interpolation with anti-alias filtering and scales WAV `smpl` loop start/end points to the new sample timeline before VADPCM encoding.
+
+## v0.6.0 import amplification
+
+The replacement row now includes an **Import gain dB** field and a default-enabled **Limit clip** option. Gain is applied to the final mono PCM after optional rate conversion and before Nintendo VADPCM encoding. Positive values amplify (`+6 dB` is approximately double amplitude); `0 dB` leaves the WAV unchanged. With clipping prevention enabled, the app reduces only the excess requested gain needed to keep samples inside signed 16-bit PCM. Disabling it applies the requested gain and hard-clamps out-of-range samples. Sample rate, duration, and WAV loop-marker positions are unchanged.

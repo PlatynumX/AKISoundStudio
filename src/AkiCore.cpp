@@ -604,6 +604,14 @@ uint32_t ExpectedSoundCount(GameId game, uint16_t bankId) {
             default: return 0;
         }
     }
+    if (game == GameId::NoMercy) {
+        switch (bankId) {
+            case 0: return 85;
+            case 1: return 165;
+            case 2: return 43;
+            default: return 0;
+        }
+    }
     return 0;
 }
 
@@ -1033,6 +1041,25 @@ const GameProfile& RevengeReduxProfile() {
     return profile;
 }
 
+const GameProfile& NoMercyProfile() {
+    static const GameProfile profile{
+        GameId::NoMercy,
+        "NW4E",
+        "WWF No Mercy (USA) (Rev 1)",
+        "",
+        28800,
+        {
+            {0, 0x016F32A0, 0x016F6F10, 0x00000000,
+             "Instruments, music, and miscellaneous sounds"},
+            {1, 0x01858030, 0x0185EDB0, 0x01855F90,
+             "Game sounds and voices"},
+            {2, 0x01967410, 0x01969880, 0x01965C50,
+             "Entrance themes"},
+        },
+    };
+    return profile;
+}
+
 bool ProfileStockBanksPresent(const std::vector<uint8_t>& rom, const GameProfile& profile) {
     for (const auto& bank : profile.banks) {
         const uint32_t expectedCount = ExpectedSoundCount(profile.id, bank.bankId);
@@ -1079,6 +1106,7 @@ const GameProfile* DetectProfileFromRom(const std::string& gameCode,
     if (gameCode == WrestleMania2000Profile().gameCode) return &WrestleMania2000Profile();
     if (gameCode == VirtualProWrestling2Profile().gameCode) return &VirtualProWrestling2Profile();
     if (gameCode == RevengeReduxProfile().gameCode) return &RevengeReduxProfile();
+    if (gameCode == NoMercyProfile().gameCode) return &NoMercyProfile();
 
     // Hack/prototype path: many ROM hacks change title/header code while
     // leaving the AKI sound banks intact.  v0.5 incorrectly rejected those
@@ -1086,6 +1114,7 @@ const GameProfile* DetectProfileFromRom(const std::string& gameCode,
     if (ProfileStockBanksPresent(rom, WrestleMania2000Profile())) return &WrestleMania2000Profile();
     if (ProfileStockBanksPresent(rom, VirtualProWrestling2Profile())) return &VirtualProWrestling2Profile();
     if (ProfileStockBanksPresent(rom, RevengeReduxProfile())) return &RevengeReduxProfile();
+    if (ProfileStockBanksPresent(rom, NoMercyProfile())) return &NoMercyProfile();
 
     // Last-resort family guess from the bank-count signature.  This is enough
     // to choose the profile, after which ParseAkiBanks/AutoDetectSoundBankLocations
@@ -1093,9 +1122,11 @@ const GameProfile* DetectProfileFromRom(const std::string& gameCode,
     const bool looksWm2k = CandidateCountsContainProfile(rom, WrestleMania2000Profile());
     const bool looksVpw2 = CandidateCountsContainProfile(rom, VirtualProWrestling2Profile());
     const bool looksRedux = CandidateCountsContainProfile(rom, RevengeReduxProfile());
-    if (looksWm2k && !looksVpw2 && !looksRedux) return &WrestleMania2000Profile();
-    if (looksVpw2 && !looksWm2k && !looksRedux) return &VirtualProWrestling2Profile();
-    if (looksRedux && !looksWm2k && !looksVpw2) return &RevengeReduxProfile();
+    const bool looksNoMercy = CandidateCountsContainProfile(rom, NoMercyProfile());
+    if (looksWm2k && !looksVpw2 && !looksRedux && !looksNoMercy) return &WrestleMania2000Profile();
+    if (looksVpw2 && !looksWm2k && !looksRedux && !looksNoMercy) return &VirtualProWrestling2Profile();
+    if (looksRedux && !looksWm2k && !looksVpw2 && !looksNoMercy) return &RevengeReduxProfile();
+    if (looksNoMercy && !looksWm2k && !looksVpw2 && !looksRedux) return &NoMercyProfile();
 
     return nullptr;
 }
@@ -1104,6 +1135,7 @@ const GameProfile* DetectProfile(const std::string& gameCode) {
     if (gameCode == WrestleMania2000Profile().gameCode) return &WrestleMania2000Profile();
     if (gameCode == VirtualProWrestling2Profile().gameCode) return &VirtualProWrestling2Profile();
     if (gameCode == RevengeReduxProfile().gameCode) return &RevengeReduxProfile();
+    if (gameCode == NoMercyProfile().gameCode) return &NoMercyProfile();
     return nullptr;
 }
 
@@ -1463,6 +1495,42 @@ void ApplyProfileRateRules(LoadedRom& rom) {
                     sound.label.rate.note += (sound.label.rate.note.empty() ? "" : " ") +
                         std::string("Reference estimate was ") + std::to_string(*oldEstimate) + " Hz.";
                 }
+            }
+        }
+        return;
+    }
+
+    if (rom.profile->id == GameId::NoMercy) {
+        for (const auto& bank : rom.profile->banks) {
+            if (bank.sequenceObjectOffset == 0) continue;
+            uint32_t bankSoundCount = 0;
+            for (const auto& sound : rom.sounds) {
+                if (sound.bankId == bank.bankId) {
+                    bankSoundCount = std::max<uint32_t>(bankSoundCount, sound.soundId + 1U);
+                }
+            }
+            const auto pitches = TraceAkiBankPitchKeys(rom, bank, bankSoundCount);
+            for (auto& sound : rom.sounds) {
+                if (sound.bankId != bank.bankId) continue;
+                const auto it = pitches.find(sound.soundId);
+                if (it == pitches.end() || it->second.empty()) continue;
+                sound.pitchKeys = it->second;
+                std::vector<uint32_t> derived;
+                for (const uint8_t key : it->second) {
+                    const uint32_t rate = Wm2kRateFromPitch(
+                        key, sound.coarseTuneSemitones, sound.fineTuneCents);
+                    if (rate != 0 && std::find(derived.begin(), derived.end(), rate) == derived.end()) {
+                        derived.push_back(rate);
+                    }
+                }
+                if (derived.empty()) continue;
+                sound.label.rate.primaryHz = derived.front();
+                sound.label.rate.alternateHz.clear();
+                for (size_t i = 1; i < derived.size(); ++i) AddAlternateUnique(sound.label.rate, derived[i]);
+                sound.label.rate.confidence = RateConfidence::RomDerived;
+                sound.label.rate.method = "No Mercy SFX selector + pitch-key trace";
+                sound.label.rate.note += (sound.label.rate.note.empty() ? "" : " ") +
+                    std::string("Pitch keys and selector mapping were read from the ROM sequence object for this bank; coarse/fine tuning comes from the waveform record.");
             }
         }
         return;
@@ -1914,6 +1982,59 @@ bool ResampleWavPcm16(const WavPcm16& input,
     return true;
 }
 
+
+bool ApplyWavGain(WavPcm16& wav,
+                  double gainDb,
+                  bool preventClipping,
+                  GainResult& result,
+                  std::string& error) {
+    result = {};
+    result.requestedDb = gainDb;
+    if (!std::isfinite(gainDb) || gainDb < -60.0 || gainDb > 60.0) {
+        error = "Import gain must be between -60.0 and +60.0 dB.";
+        return false;
+    }
+    if (wav.monoSamples.empty()) {
+        error = "The WAV contains no PCM samples to amplify.";
+        return false;
+    }
+
+    int32_t peak = 0;
+    for (int16_t sample : wav.monoSamples) {
+        const int32_t magnitude = sample == INT16_MIN ? 32768 : std::abs(static_cast<int32_t>(sample));
+        peak = std::max(peak, magnitude);
+    }
+    result.peakBefore = static_cast<int16_t>(std::min<int32_t>(peak, 32767));
+
+    double appliedDb = gainDb;
+    if (preventClipping && gainDb > 0.0 && peak > 0) {
+        const double maximumSafeDb = 20.0 * std::log10(32767.0 / static_cast<double>(peak));
+        if (appliedDb > maximumSafeDb) {
+            appliedDb = maximumSafeDb;
+            result.limitedToPreventClipping = true;
+        }
+    }
+    result.appliedDb = appliedDb;
+    const double multiplier = std::pow(10.0, appliedDb / 20.0);
+    int32_t peakAfter = 0;
+    for (int16_t& sample : wav.monoSamples) {
+        const long long scaled = std::llround(static_cast<double>(sample) * multiplier);
+        if (scaled > 32767) {
+            sample = 32767;
+            ++result.clippedSamples;
+        } else if (scaled < -32768) {
+            sample = -32768;
+            ++result.clippedSamples;
+        } else {
+            sample = static_cast<int16_t>(scaled);
+        }
+        const int32_t magnitude = sample == INT16_MIN ? 32768 : std::abs(static_cast<int32_t>(sample));
+        peakAfter = std::max(peakAfter, magnitude);
+    }
+    result.peakAfter = static_cast<int16_t>(std::min<int32_t>(peakAfter, 32767));
+    return true;
+}
+
 bool EncodePcmWithOriginalBook(const SoundRecord& sound,
                                const std::vector<int16_t>& samples,
                                std::vector<uint8_t>& encoded,
@@ -2075,7 +2196,7 @@ bool ResolveReplacementLoopPlan(const SoundRecord& sound,
                                 std::string& error) {
     plan = {};
 
-    // Wavosaur-style looping is marker-driven. A WAV either supplies one
+    // standard WAV looping is marker-driven. A WAV either supplies one
     // forward loop through its two saved loop points, or it is non-looping.
     // Never reuse numeric loop positions from the sound being replaced: those
     // positions belong to the old waveform and are meaningless for new music.

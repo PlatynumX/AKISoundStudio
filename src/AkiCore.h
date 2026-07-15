@@ -15,6 +15,7 @@ enum class GameId {
     WrestleMania2000,
     VirtualProWrestling2,
     RevengeRedux,
+    NoMercy,
 };
 
 enum class RomByteOrder {
@@ -94,14 +95,23 @@ struct WavPcm16 {
     uint32_t sampleRate = 0;
     uint16_t sourceChannels = 0;
     std::vector<int16_t> monoSamples;
-    // RIFF/WAVE loop metadata written by editors such as Wavosaur. One
-    // forward loop is defined by exactly two points: loop start and loop end.
+    // RIFF/WAVE loop metadata. One forward loop is defined by exactly two
+    // points: loop start and loop end.
     // A replacement WAV without those points is treated as non-looping.
     bool loopMetadataPresent = false;
     bool hasLoop = false;
     uint32_t loopStart = 0;
     uint32_t loopEnd = 0; // exclusive, matching ALADPCMloop
     uint32_t loopCount = 0xFFFFFFFFU;
+};
+
+struct GainResult {
+    double requestedDb = 0.0;
+    double appliedDb = 0.0;
+    bool limitedToPreventClipping = false;
+    uint64_t clippedSamples = 0;
+    int16_t peakBefore = 0;
+    int16_t peakAfter = 0;
 };
 
 struct BankAllocation {
@@ -174,6 +184,7 @@ private:
 const GameProfile& WrestleMania2000Profile();
 const GameProfile& VirtualProWrestling2Profile();
 const GameProfile& RevengeReduxProfile();
+const GameProfile& NoMercyProfile();
 const GameProfile* DetectProfile(const std::string& gameCode);
 
 bool LoadRom(const std::filesystem::path& path, LoadedRom& out, std::string& error);
@@ -193,6 +204,14 @@ bool ResampleWavPcm16(const WavPcm16& input,
                       uint32_t targetSampleRate,
                       WavPcm16& output,
                       std::string& error);
+// Applies import gain to the PCM only. Sample count, sample rate, and the two
+// loop-marker positions remain unchanged. With preventClipping enabled, the
+// effective positive gain is reduced only as much as needed to fit int16 PCM.
+bool ApplyWavGain(WavPcm16& wav,
+                  double gainDb,
+                  bool preventClipping,
+                  GainResult& result,
+                  std::string& error);
 bool EncodePcmWithOriginalBook(const SoundRecord& sound,
                                const std::vector<int16_t>& samples,
                                std::vector<uint8_t>& encoded,

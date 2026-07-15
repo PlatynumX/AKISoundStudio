@@ -1,4 +1,4 @@
-# Validation log - AKI Sound Studio v0.5.9
+# Validation log - AKI Sound Studio v0.6.0
 
 Validated in the Linux build environment with the platform-independent core smoke test.
 
@@ -50,7 +50,7 @@ Validated in the Linux build environment with the platform-independent core smok
 
 - Added a synthetic AKI `N64 PtrTablesV2` bank and verified a longer waveform used contiguous blank TBL padding without touching the protected object that followed it.
 
-## v0.5.4 Wavosaur two-point loop regression
+## v0.5.4 two-point WAV loop regression
 
 - Verified a markerless WAV replacing an already-looped sound clears the old loop pointer instead of inheriting stale sample positions.
 - Exported a WAV with one forward loop, re-imported it, and verified the two positions round-trip exactly.
@@ -88,7 +88,7 @@ Validated in the Linux build environment with the platform-independent core smok
 - Full Redux parser/replacement smoke test verifies shifted Bank 00 label `0033 = cheering` and verifies changed Bank 01 record `005F` remains unlabeled.
 
 
-## v0.5.9 Revenge Redux ROM rate trace
+## v0.6.0 Revenge Redux ROM rate trace
 
 - Parsed the source script pointer table at ROM `0x00030ACC` as 210 pointers.
 - All 210 scripts resolved inside ROM `0x0002FAE0-0x00030AB8` and parsed without an unknown/truncated opcode.
@@ -99,8 +99,15 @@ Validated in the Linux build environment with the platform-independent core smok
 - Full Redux parse/repack test still parses 245 records and preserves nonstandard tail records `0093/0094`.
 
 
-## v0.5.9 resampling regression
+## v0.6.0 resampling regression
 
 - 44,100 Hz mono PCM converted to 22,050 Hz with duration preserved.
 - Two-point loop markers scaled from 882-3528 to 441-1764.
 - GCC core build and smoke test passed.
+
+## v0.6.0 import-gain regression
+
+- Applied +6 dB to a resampled looped PCM WAV before VADPCM encoding.
+- Verified peak amplitude increased while sample count, sample rate, and both loop-marker positions remained unchanged.
+- Verified default clipping prevention produced zero clipped samples.
+- GCC core build and synthetic test suite passed.
