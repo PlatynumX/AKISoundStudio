@@ -36,10 +36,11 @@ uint32_t GetBe32(const std::vector<uint8_t>& data, size_t offset) {
            data[offset + 3];
 }
 
-aki::LoadedRom MakeSyntheticLoopRom(std::string& error) {
+aki::LoadedRom MakeSyntheticLoopRom(std::string& error,
+                                    uint32_t protectedObject = 0x380,
+                                    size_t romSize = 0x500) {
     constexpr uint32_t control = 0x100;
     constexpr uint32_t wave = 0x300;
-    constexpr uint32_t protectedObject = 0x380;
 
     aki::SoundRecord encoder;
     encoder.predictorOrder = 2;
@@ -57,7 +58,7 @@ aki::LoadedRom MakeSyntheticLoopRom(std::string& error) {
     }
 
     aki::LoadedRom rom;
-    rom.z64.assign(0x500, 0);
+    rom.z64.assign(romSize, 0);
     const char magic[] = "N64 PtrTablesV2";
     std::copy(magic, magic + 15, rom.z64.begin() + control);
     PutBe32(rom.z64, control + 0x20, 1);
@@ -146,6 +147,103 @@ int main(int argc, char** argv) {
         gainResult.peakAfter <= gainResult.peakBefore ||
         gainResult.clippedSamples != 0) {
         return Fail("WAV gain changed loop points or failed clipping-safe amplification");
+    }
+
+    // v0.7.2 real-world loop-marker regression fixture. The WAV stores
+    // a forward loop as two RIFF smpl points. The smpl end is inclusive on
+    // disk and must become an exclusive end internally.
+    const auto realLoopFixture =
+        std::filesystem::path(AKI_TEST_SOURCE_DIR) / "tests" / "fixtures" / "austin.wav";
+    aki::WavPcm16 realLoopWav;
+    std::string realLoopError;
+    if (!aki::ReadPcm16Wav(realLoopFixture, realLoopWav, realLoopError)) {
+        return Fail("real loop fixture import failed: " + realLoopError);
+    }
+    if (realLoopWav.sampleRate != 7000 ||
+        realLoopWav.sourceChannels != 1 ||
+        realLoopWav.monoSamples.size() != 188179 ||
+        !realLoopWav.loopMetadataPresent || !realLoopWav.hasLoop ||
+        realLoopWav.loopStart != 12544 ||
+        realLoopWav.loopEnd != 133889 ||
+        realLoopWav.loopCount != 0xFFFFFFFFU) {
+        return Fail("real loop fixture metadata was not read exactly");
+    }
+
+    aki::SoundRecord previewSound;
+    previewSound.loopControlOffset = 1;
+    previewSound.loopStart = realLoopWav.loopStart;
+    previewSound.loopEnd = realLoopWav.loopEnd;
+    const auto previewPlan = aki::ResolveLoopPreviewPlan(
+        previewSound, realLoopWav.monoSamples.size());
+    if (!previewPlan.hasLoop ||
+        previewPlan.introEnd != 12544 ||
+        previewPlan.loopStart != 12544 ||
+        previewPlan.loopEnd != 133889 ||
+        previewPlan.loopEnd - previewPlan.loopStart != 121345) {
+        return Fail("loop preview plan did not use the two fixture markers");
+    }
+
+    aki::WavPcm16 doubledLoopWav;
+    if (!aki::ResampleWavPcm16(
+            realLoopWav, 14000, doubledLoopWav, realLoopError)) {
+        return Fail("real loop fixture resampling failed: " + realLoopError);
+    }
+    if (doubledLoopWav.monoSamples.size() != 376358 ||
+        doubledLoopWav.loopStart != 25088 ||
+        doubledLoopWav.loopEnd != 267778 ||
+        !doubledLoopWav.hasLoop) {
+        return Fail("real loop fixture markers did not scale with resampling");
+    }
+
+    aki::LoadedRom realLoopRom = MakeSyntheticLoopRom(
+        realLoopError, 0x30000, 0x30010);
+    if (!realLoopError.empty() || realLoopRom.sounds.size() != 1) {
+        return Fail("large synthetic loop bank parse failed: " + realLoopError);
+    }
+    aki::ReplacementResult realLoopResult;
+    if (!aki::ReplaceSoundPcm(realLoopRom,
+                              realLoopRom.sounds[0],
+                              realLoopWav,
+                              realLoopResult,
+                              realLoopError)) {
+        return Fail("real loop fixture injection failed: " + realLoopError);
+    }
+    const auto& injectedLoopSound = realLoopRom.sounds[0];
+    if (!realLoopResult.loopEnabled ||
+        !realLoopResult.loopImportedFromWav ||
+        !realLoopResult.loopStateRebuilt ||
+        injectedLoopSound.loopStart != 12544 ||
+        injectedLoopSound.loopEnd != 133889 ||
+        injectedLoopSound.loopControlOffset == 0 ||
+        GetBe32(realLoopRom.z64, injectedLoopSound.loopControlOffset) != 12544 ||
+        GetBe32(realLoopRom.z64, injectedLoopSound.loopControlOffset + 4) != 133889) {
+        return Fail("real loop fixture injection did not rebuild exact loop metadata");
+    }
+
+    const auto realLoopExport =
+        std::filesystem::temp_directory_path() / "aki_real_loop_roundtrip.wav";
+    if (!aki::WriteMonoPcm16Wav(realLoopExport,
+                                realLoopWav.monoSamples,
+                                realLoopWav.sampleRate,
+                                realLoopWav.loopStart,
+                                realLoopWav.loopEnd,
+                                realLoopWav.loopCount,
+                                realLoopError)) {
+        return Fail("real loop fixture export failed: " + realLoopError);
+    }
+    aki::WavPcm16 roundTrippedLoopWav;
+    if (!aki::ReadPcm16Wav(realLoopExport,
+                           roundTrippedLoopWav,
+                           realLoopError)) {
+        return Fail("real loop fixture re-import failed: " + realLoopError);
+    }
+    std::error_code realLoopRemoveError;
+    std::filesystem::remove(realLoopExport, realLoopRemoveError);
+    if (!roundTrippedLoopWav.hasLoop ||
+        roundTrippedLoopWav.loopStart != 12544 ||
+        roundTrippedLoopWav.loopEnd != 133889 ||
+        roundTrippedLoopWav.loopCount != 0xFFFFFFFFU) {
+        return Fail("real loop fixture export changed the two loop markers");
     }
 
     // v0.5.2 regression guard: LoadedRom owns customProfile while profile points

@@ -28,7 +28,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.1";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.2";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -1215,15 +1215,13 @@ void PlaySelected() {
         return;
     }
 
-    const bool hasValidLoop = sound.loopControlOffset != 0 &&
-                              sound.loopStart < sound.loopEnd &&
-                              sound.loopStart < samples.size();
+    const auto previewPlan = aki::ResolveLoopPreviewPlan(sound, samples.size());
     std::wstring playbackError;
-    if (hasValidLoop) {
-        const size_t loopStart = std::min<size_t>(sound.loopStart, samples.size());
-        const size_t loopEnd = std::min<size_t>(sound.loopEnd, samples.size());
-        if (loopStart < loopEnd) {
-            gApp.previewIntroSamples.assign(samples.begin(), samples.begin() + loopStart);
+    if (previewPlan.hasLoop) {
+        const size_t loopStart = previewPlan.loopStart;
+        const size_t loopEnd = previewPlan.loopEnd;
+        {
+            gApp.previewIntroSamples.assign(samples.begin(), samples.begin() + previewPlan.introEnd);
             gApp.previewLoopSamples.assign(samples.begin() + loopStart,
                                            samples.begin() + loopEnd);
 
@@ -1275,7 +1273,7 @@ void OpenExportFolder() {
 
 void ShowAbout() {
     const wchar_t* text =
-        L"AKI Sound Studio 0.7.1\r\n\r\n"
+        L"AKI Sound Studio 0.7.2\r\n\r\n"
         L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, WCW/nWo Revenge Redux, and WWF No Mercy.\r\n\r\n"
         L"Current features:\r\n"
         L"• Stock and compatible-hack ROM detection\r\n"
@@ -1285,7 +1283,7 @@ void ShowAbout() {
         L"• two-point WAV loop markers with rebuilt ADPCM loop state\r\n"
         L"• Hack profile CSV import/export and relocated-bank auto-detection\r\n"
         L"• Big-endian .z64 save-as with CIC-6102 CRC repair\r\n\r\n"
-        L"Version 0.7.1 adds full-bank capacity reporting, modified-bank detection with non-frame trailer compatibility, and automatic relocation for ordinary oversized replacements as well as added or migrated sounds.";
+        L"Version 0.7.2 validates WAV loop-marker handling against a real-world fixture, including inclusive RIFF smpl end conversion, loop preview segmentation, resampling, injection loop-state rebuilding, and marker-preserving export.";
     MessageBoxW(gApp.mainWindow, text, kAppTitle, MB_OK | MB_ICONINFORMATION);
 }
 

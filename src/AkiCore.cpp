@@ -1893,6 +1893,23 @@ bool ReadPcm16Wav(const std::filesystem::path& path,
     return true;
 }
 
+LoopPreviewPlan ResolveLoopPreviewPlan(const SoundRecord& sound,
+                                       size_t decodedSampleCount) {
+    LoopPreviewPlan plan;
+    if (sound.loopControlOffset == 0 ||
+        sound.loopStart >= sound.loopEnd ||
+        sound.loopStart >= decodedSampleCount) {
+        return plan;
+    }
+    const size_t clampedEnd = std::min<size_t>(sound.loopEnd, decodedSampleCount);
+    if (sound.loopStart >= clampedEnd) return plan;
+    plan.hasLoop = true;
+    plan.introEnd = sound.loopStart;
+    plan.loopStart = sound.loopStart;
+    plan.loopEnd = static_cast<uint32_t>(clampedEnd);
+    return plan;
+}
+
 bool ResampleWavPcm16(const WavPcm16& input,
                       uint32_t targetSampleRate,
                       WavPcm16& output,

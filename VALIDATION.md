@@ -134,3 +134,18 @@ Validated in the Linux build environment with the platform-independent core smok
 - Verified the 0x100 bytes beginning at ROM `0x0196AFCC` stayed byte-identical.
 - Verified relocated Bank 02 CTL and TBL ASM references resolve to the new addresses.
 - GCC and Clang synthetic suites pass. Stock WM2000, No Mercy Rev 1, Revenge Redux, and Badd Blood real-ROM smoke tests pass.
+
+## v0.7.2 real WAV loop-marker fixture
+
+Validated `tests/fixtures/austin.wav` under GCC and Clang:
+
+- PCM: mono, 16-bit, 7,000 Hz, 188,179 samples.
+- RIFF `smpl` loop start: 12,544.
+- RIFF `smpl` loop end: 133,888 inclusive.
+- Internal/N64 loop end: 133,889 exclusive.
+- Preview plan: 12,544 intro samples and 121,345 repeating samples.
+- 14,000 Hz resample: 376,358 samples, loop 25,088-267,778 exclusive.
+- Synthetic-bank injection rebuilt the loop record and decoder state.
+- WAV export/re-import preserved the two marker positions exactly.
+
+Both GCC and Clang CTest runs passed.

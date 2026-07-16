@@ -105,6 +105,16 @@ struct WavPcm16 {
     uint32_t loopCount = 0xFFFFFFFFU;
 };
 
+struct LoopPreviewPlan {
+    bool hasLoop = false;
+    uint32_t introEnd = 0;
+    uint32_t loopStart = 0;
+    uint32_t loopEnd = 0; // exclusive
+};
+
+LoopPreviewPlan ResolveLoopPreviewPlan(const SoundRecord& sound,
+                                       size_t decodedSampleCount);
+
 struct GainResult {
     double requestedDb = 0.0;
     double appliedDb = 0.0;

@@ -1,4 +1,4 @@
-# AKI Sound Studio v0.7.1
+# AKI Sound Studio v0.7.2
 
 Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, **WCW/nWo Revenge Redux**, and **WWF No Mercy (USA) Rev 1**.
 
@@ -22,6 +22,16 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pr
 
 
 
+
+## v0.7.2 real WAV loop-marker regression
+
+- Added `tests/fixtures/austin.wav` as a real-world RIFF/WAVE loop-marker fixture.
+- Confirms the file contains 188,179 mono 16-bit samples at 7,000 Hz.
+- Reads the two loop points exactly as start `12,544` and inclusive WAV end `133,888`; the internal/N64 exclusive end is `133,889`.
+- Preview segmentation is now resolved by shared core logic: samples `0-12,543` play once, then samples `12,544-133,888` repeat.
+- Resampling scales both loop points on the new sample timeline.
+- Injection regression verifies the N64 loop record and 16-sample decoder state are rebuilt at loop start.
+- WAV export/re-import verifies the same two loop markers survive a round trip.
 
 ## v0.7.1 full-bank relocation hardening
 
@@ -50,14 +60,14 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pr
 
 ## Android/Termux repository updater
 
-Place `AKISoundStudio-v0.7.1-source-full-bank-relocation.zip` and `update_aki_sound_studio_v071_full_bank_relocation_termux.sh` on the phone, then run:
+Place `AKISoundStudio-v0.7.2-source-real-loop-fixture.zip` and `update_aki_sound_studio_v072_real_loop_fixture_termux.sh` on the phone, then run:
 
 ```bash
 termux-setup-storage
-bash ~/storage/downloads/update_aki_sound_studio_v071_full_bank_relocation_termux.sh
+bash ~/storage/downloads/update_aki_sound_studio_v072_real_loop_fixture_termux.sh
 ```
 
-The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.7.1-win64.zip`.
+The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.7.2-win64.zip`.
 
 ## Editable list entries
 
