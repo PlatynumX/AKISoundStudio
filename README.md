@@ -1,6 +1,13 @@
-# AKI Sound Studio v0.7.2
+# AKI Sound Studio v0.7.2a
 
 Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, **WCW/nWo Revenge Redux**, and **WWF No Mercy (USA) Rev 1**.
+
+## v0.7.2a fixture packaging fix
+
+- Commits `tests/fixtures/austin.wav` despite the general `*.wav` ignore rule.
+- CMake verifies the fixture exists at configure time and copies it into the build tree.
+- The smoke test reads the staged fixture instead of relying on a hardcoded source-tree path.
+- Missing-fixture failures are identified as test configuration errors.
 
 ## What works
 
@@ -60,14 +67,14 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pr
 
 ## Android/Termux repository updater
 
-Place `AKISoundStudio-v0.7.2-source-real-loop-fixture.zip` and `update_aki_sound_studio_v072_real_loop_fixture_termux.sh` on the phone, then run:
+Place `AKISoundStudio-v0.7.2a-source-fixture-fix.zip` and `update_aki_sound_studio_v072a_fixture_fix_termux.sh` on the phone, then run:
 
 ```bash
 termux-setup-storage
-bash ~/storage/downloads/update_aki_sound_studio_v072_real_loop_fixture_termux.sh
+bash ~/storage/downloads/update_aki_sound_studio_v072a_fixture_fix_termux.sh
 ```
 
-The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.7.2-win64.zip`.
+The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.7.2a-win64.zip`.
 
 ## Editable list entries
 

@@ -6,6 +6,7 @@
 *.suo
 *.VC.db
 *.wav
+!tests/fixtures/austin.wav
 *.z64
 *.v64
 *.n64

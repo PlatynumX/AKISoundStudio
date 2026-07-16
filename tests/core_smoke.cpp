@@ -153,7 +153,12 @@ int main(int argc, char** argv) {
     // a forward loop as two RIFF smpl points. The smpl end is inclusive on
     // disk and must become an exclusive end internally.
     const auto realLoopFixture =
-        std::filesystem::path(AKI_TEST_SOURCE_DIR) / "tests" / "fixtures" / "austin.wav";
+        std::filesystem::path(AKI_TEST_FIXTURE_DIR) / "austin.wav";
+    if (!std::filesystem::is_regular_file(realLoopFixture)) {
+        return Fail(
+            "required regression fixture is missing: " + realLoopFixture.string() +
+            "\nThis is a test configuration error, not a WAV importer failure.");
+    }
     aki::WavPcm16 realLoopWav;
     std::string realLoopError;
     if (!aki::ReadPcm16Wav(realLoopFixture, realLoopWav, realLoopError)) {

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AKISoundStudio VERSION 0.7.2 LANGUAGES CXX)
+project(AKISoundStudio VERSION 0.7.2.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,8 +38,27 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    set(AKI_TEST_FIXTURE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/tests/fixtures")
+    set(AKI_TEST_FIXTURE_BINARY_DIR "${CMAKE_BINARY_DIR}/tests/fixtures")
+    set(AKI_REAL_LOOP_FIXTURE "${AKI_TEST_FIXTURE_SOURCE_DIR}/austin.wav")
+
+    if(NOT EXISTS "${AKI_REAL_LOOP_FIXTURE}")
+        message(FATAL_ERROR
+            "Required regression fixture is missing: ${AKI_REAL_LOOP_FIXTURE}\n"
+            "This is a source-package/test configuration error, not a WAV importer failure.")
+    endif()
+
+    file(MAKE_DIRECTORY "${AKI_TEST_FIXTURE_BINARY_DIR}")
+    configure_file(
+        "${AKI_REAL_LOOP_FIXTURE}"
+        "${AKI_TEST_FIXTURE_BINARY_DIR}/austin.wav"
+        COPYONLY
+    )
+
     add_executable(aki_core_smoke tests/core_smoke.cpp)
     target_link_libraries(aki_core_smoke PRIVATE aki_core)
-    target_compile_definitions(aki_core_smoke PRIVATE AKI_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    target_compile_definitions(aki_core_smoke PRIVATE
+        AKI_TEST_FIXTURE_DIR="${AKI_TEST_FIXTURE_BINARY_DIR}"
+    )
     add_test(NAME core_synthetic COMMAND aki_core_smoke)
 endif()
