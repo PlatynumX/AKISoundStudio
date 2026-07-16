@@ -151,7 +151,77 @@ struct ReplacementResult {
     uint32_t loopEnd = 0;
     uint32_t loopCount = 0;
     bool bankRepacked = false;
+    bool bankRelocated = false;
     bool sizeOverrideUsed = false;
+};
+
+
+struct AsmBankPointerReference {
+    uint32_t upperInstructionOffset = 0;
+    uint32_t lowerInstructionOffset = 0;
+    uint32_t resolvedAddress = 0;
+    uint8_t targetRegister = 0;
+    bool usesAddiu = false;
+};
+
+struct BankTraceResult {
+    uint16_t bankId = 0;
+    uint32_t controlOffset = 0;
+    uint32_t waveOffset = 0;
+    uint32_t soundCount = 0;
+    std::vector<AsmBankPointerReference> controlReferences;
+    std::vector<AsmBankPointerReference> waveReferences;
+};
+
+struct WaveformIdentity {
+    uint16_t bankId = 0;
+    uint16_t soundId = 0;
+    uint32_t decodedSamples = 0;
+    std::string pcmSha1;
+};
+
+struct DuplicateGroup {
+    std::string pcmSha1;
+    uint32_t decodedSamples = 0;
+    std::vector<WaveformIdentity> members;
+};
+
+struct SoundMatch {
+    uint16_t sourceBankId = 0;
+    uint16_t sourceSoundId = 0;
+    uint16_t targetBankId = 0;
+    uint16_t targetSoundId = 0;
+    std::string pcmSha1;
+    uint32_t decodedSamples = 0;
+};
+
+struct BankExpansionResult {
+    uint16_t bankId = 0;
+    uint16_t newSoundId = 0;
+    uint32_t oldSoundCount = 0;
+    uint32_t newSoundCount = 0;
+    uint32_t relocatedCoarseTableOffset = 0;
+    uint32_t relocatedFineTableOffset = 0;
+    uint32_t relocatedPointerTableOffset = 0;
+    uint32_t newControlRecordOffset = 0;
+    uint32_t newPredictorBookOffset = 0;
+    uint32_t newLoopOffset = 0;
+    ReplacementResult replacement;
+};
+
+struct MigrationOptions {
+    bool resampleToTargetRate = true;
+    double gainDb = 0.0;
+    bool preventClipping = true;
+    BankWriteOptions bankWrite;
+};
+
+struct MigrationResult {
+    uint32_t sourceRateHz = 0;
+    uint32_t targetRateHz = 0;
+    bool resampled = false;
+    GainResult gain;
+    ReplacementResult replacement;
 };
 
 struct LoadedRom {
@@ -265,6 +335,53 @@ bool ExportHackProfileCsv(const LoadedRom& rom,
 bool ImportHackProfileCsv(LoadedRom& rom,
                           const std::filesystem::path& path,
                           std::string& error);
+
+
+// Scans MIPS LUI + ADDIU/ORI address construction pairs and ties them to
+// structurally validated PtrTablesV2/WaveTables banks. This is used for hacked
+// ROMs whose CTL/TBL blocks have moved and whose code pointers were updated.
+bool TraceSoundBankAsmPointers(const LoadedRom& rom,
+                               std::vector<BankTraceResult>& traces,
+                               std::string& error);
+
+// Produces a stable identity from the fully decoded mono PCM. Exact identities
+// are safe for duplicate detection and cross-game label transfer.
+bool BuildWaveformIdentities(const LoadedRom& rom,
+                             std::vector<WaveformIdentity>& identities,
+                             std::string& error);
+bool FindDuplicateWaveforms(const LoadedRom& rom,
+                            std::vector<DuplicateGroup>& groups,
+                            std::string& error);
+bool MatchExactWaveforms(const LoadedRom& source,
+                         const LoadedRom& target,
+                         std::vector<SoundMatch>& matches,
+                         std::string& error);
+
+// Expands an existing PtrTablesV2 bank by one entry. The metadata tables are
+// relocated into verified blank CTL space, the predictor book is cloned from a
+// template entry, and the new WAV is then encoded/repacked normally.
+bool AppendSoundFromWav(LoadedRom& rom,
+                        uint16_t bankId,
+                        uint16_t templateSoundId,
+                        const WavPcm16& wav,
+                        const BankWriteOptions& options,
+                        BankExpansionResult& result,
+                        std::string& error);
+
+// Transfers a decoded sound from one loaded AKI ROM into an existing target
+// slot, carrying its loop points and automatically handling rate conversion,
+// gain, VADPCM encoding, bank repacking, and target metadata constraints.
+bool MigrateSoundToSlot(const LoadedRom& sourceRom,
+                        const SoundRecord& sourceSound,
+                        LoadedRom& targetRom,
+                        SoundRecord& targetSound,
+                        const MigrationOptions& options,
+                        MigrationResult& result,
+                        std::string& error);
+
+bool ExportWaveformAnalysisCsv(const LoadedRom& rom,
+                               const std::filesystem::path& path,
+                               std::string& error);
 
 std::string RateConfidenceText(RateConfidence confidence);
 std::string Hex4(uint32_t value);

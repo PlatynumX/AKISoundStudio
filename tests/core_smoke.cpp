@@ -467,6 +467,81 @@ int main(int argc, char** argv) {
     if (decoded.empty()) return Fail("decoder returned no samples");
     if (decoded.size() != target->decodedSampleCount()) return Fail("decoded size mismatch");
 
+    // Real-world relocation regression: Badd Blood compacts all WM2000 banks
+    // and leaves only six bytes after the entrance TBL.  Older structural
+    // validation rejected its non-frame trailer bytes, and ordinary Replace
+    // stopped at a size warning instead of using the relocation engine.
+    if (romPath.filename().string().find("Badd Blood") != std::string::npos) {
+        aki::BankAllocation entranceAllocation;
+        if (!aki::GetBankAllocation(rom, 2, entranceAllocation, error)) {
+            return Fail("Badd Blood entrance allocation failed: " + error);
+        }
+        const uint32_t entranceFree =
+            entranceAllocation.safeWaveEndOffset - entranceAllocation.normalWaveEndOffset;
+        if (entranceFree != 6U) {
+            return Fail("Badd Blood entrance bank did not report the expected six free bytes");
+        }
+
+        aki::LoadedRom relocated = rom;
+        aki::SoundRecord* entrance = nullptr;
+        for (auto& candidate : relocated.sounds) {
+            if (candidate.bankId == 2 && candidate.soundId == 0) {
+                entrance = &candidate;
+                break;
+            }
+        }
+        if (!entrance) return Fail("Badd Blood entrance sound 0000 was not found");
+
+        aki::SoundRecord complete = *entrance;
+        complete.encodedBytes -= complete.encodedBytes % 9U;
+        std::string entranceDecodeError;
+        auto entrancePcm = aki::DecodeSelectedSound(relocated, complete, entranceDecodeError);
+        if (!entranceDecodeError.empty() || entrancePcm.empty()) {
+            return Fail("Badd Blood entrance decode failed: " + entranceDecodeError);
+        }
+        entrancePcm.insert(entrancePcm.end(), 1600, 0);
+        aki::WavPcm16 bigger;
+        bigger.sampleRate = entrance->label.rate.primaryHz.value_or(22050U);
+        bigger.sourceChannels = 1;
+        bigger.monoSamples = std::move(entrancePcm);
+
+        const uint32_t oldCtl = relocated.profile->banks[2].controlOffset;
+        const uint32_t oldTbl = relocated.profile->banks[2].waveOffset;
+        constexpr uint32_t protectedOffset = 0x0196AFCCU;
+        if (static_cast<uint64_t>(protectedOffset) + 0x100U > relocated.z64.size()) {
+            return Fail("Badd Blood protected boundary is outside the ROM");
+        }
+        const std::vector<uint8_t> protectedBytes(
+            relocated.z64.begin() + protectedOffset,
+            relocated.z64.begin() + protectedOffset + 0x100U);
+
+        aki::ReplacementResult relocationResult;
+        if (!aki::ReplaceSoundPcm(relocated, *entrance, bigger, relocationResult, error)) {
+            return Fail("Badd Blood automatic entrance relocation failed: " + error);
+        }
+        if (!relocationResult.bankRelocated ||
+            relocated.profile->banks[2].controlOffset == oldCtl ||
+            relocated.profile->banks[2].waveOffset == oldTbl) {
+            return Fail("Badd Blood oversized replacement did not relocate Bank 02");
+        }
+        if (!std::equal(protectedBytes.begin(), protectedBytes.end(),
+                        relocated.z64.begin() + protectedOffset)) {
+            return Fail("Badd Blood relocation modified data after the original full entrance TBL");
+        }
+
+        std::vector<aki::BankTraceResult> relocatedTraces;
+        if (!aki::TraceSoundBankAsmPointers(relocated, relocatedTraces, error)) {
+            return Fail("Badd Blood relocated pointer trace failed: " + error);
+        }
+        const auto trace = std::find_if(
+            relocatedTraces.begin(), relocatedTraces.end(),
+            [](const aki::BankTraceResult& item) { return item.bankId == 2; });
+        if (trace == relocatedTraces.end() || trace->controlReferences.empty() ||
+            trace->waveReferences.empty()) {
+            return Fail("Badd Blood relocated entrance ASM pointers were not patched/detected");
+        }
+    }
+
     std::vector<uint8_t> reencoded;
     uint32_t paddedSamples = 0;
     if (!aki::EncodePcmWithOriginalBook(*target, decoded, reencoded,

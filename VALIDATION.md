@@ -111,3 +111,26 @@ Validated in the Linux build environment with the platform-independent core smok
 - Verified peak amplitude increased while sample count, sample rate, and both loop-marker positions remained unchanged.
 - Verified default clipping prevention produced zero clipped samples.
 - GCC core build and synthetic test suite passed.
+
+
+## v0.7.0 validation
+
+- GCC C++17 core build: PASS.
+- CTest synthetic suite: PASS.
+- Real WM2000: 238 sounds decoded/identified; 3 duplicate groups; all three banks returned ASM CTL/TBL references.
+- Real No Mercy Rev 1: 293 sounds decoded/identified; duplicate analysis completed; all three banks returned ASM CTL/TBL references.
+- Real Revenge Redux: 245 identities completed, including the two records with non-frame trailer bytes; both banks returned ASM references.
+- WM2000 Bank 00 expansion: 46 -> 47 entries; bank relocated above the original 32 MiB image; all traced CTL/TBL references patched; reparsed expanded ROM contained 239 total sounds.
+- Cross-game migration smoke test: WM2000 source PCM migrated into a No Mercy destination slot, target bank automatically relocated when the rebuilt TBL exceeded normal capacity.
+- Expanded output remains below the 64 MiB N64 ROM ceiling.
+
+
+## v0.7.1 Badd Blood full-bank regression
+
+- Auto-detected shifted WM2000 CTL/TBL pairs in `WWF WarZone - Badd Blood (USA) (v1.0).z64`.
+- Parsed all 238 records, including entrance records with non-frame trailer bytes.
+- Measured Bank 02 TBL free in-place growth as exactly 6 bytes.
+- Forced an oversized Bank 02 replacement and verified automatic CTL/TBL relocation.
+- Verified the 0x100 bytes beginning at ROM `0x0196AFCC` stayed byte-identical.
+- Verified relocated Bank 02 CTL and TBL ASM references resolve to the new addresses.
+- GCC and Clang synthetic suites pass. Stock WM2000, No Mercy Rev 1, Revenge Redux, and Badd Blood real-ROM smoke tests pass.

@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AKISoundStudio-v0.6.0-win64
+          name: AKISoundStudio-v0.7.1-win64
           path: |
             package/AKISoundStudio.exe
             package/data

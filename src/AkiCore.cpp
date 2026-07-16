@@ -638,7 +638,11 @@ bool LooksLikeAkiBankAt(const std::vector<uint8_t>& rom,
         const uint32_t relativeWave = ReadBe32(rom, static_cast<size_t>(recordOffset));
         const uint32_t encodedBytes = ReadBe32(rom, static_cast<size_t>(recordOffset) + 4U);
         const uint32_t bookRelative = ReadBe32(rom, static_cast<size_t>(recordOffset) + 0x10U);
-        if (encodedBytes == 0 || encodedBytes > 0x02000000 || (encodedBytes % 9U) != 0) return false;
+        if (encodedBytes < 9U || encodedBytes > 0x02000000) return false;
+        // Modified AKI banks made by older tools may retain one to eight
+        // trailer bytes after the last complete 9-byte VADPCM frame.  The
+        // decoder and the game consume complete frames and ignore that tail,
+        // so it must not make an otherwise valid relocated bank invisible.
         if (bookRelative == 0) return false;
         const uint64_t waveEnd = static_cast<uint64_t>(waveOffset) + relativeWave + encodedBytes;
         if (waveEnd > rom.size()) return false;
@@ -657,6 +661,19 @@ std::vector<uint32_t> FindPtrTableCandidates(const std::vector<uint8_t>& rom) {
         }
     }
     return offsets;
+}
+
+
+std::vector<uint32_t> FindWaveTableCandidates(const std::vector<uint8_t>& rom) {
+    constexpr char kWaveMagic[] = "N64 WaveTables ";
+    std::vector<uint32_t> result;
+    const size_t magicLength = sizeof(kWaveMagic) - 1;
+    for (size_t pos = 0; pos + magicLength <= rom.size(); ++pos) {
+        if (std::memcmp(rom.data() + pos, kWaveMagic, magicLength) == 0) {
+            result.push_back(static_cast<uint32_t>(pos));
+        }
+    }
+    return result;
 }
 
 RateConfidence ParseConfidenceText(std::string value) {
@@ -2333,6 +2350,12 @@ bool FindFreeLoopControlBlock(const LoadedRom& rom,
     return false;
 }
 
+bool RelocateBankForExpansion(LoadedRom& rom,
+                              uint16_t bankId,
+                              uint32_t extraCtlBytes,
+                              uint32_t extraWaveBytes,
+                              std::string& error);
+
 bool LoopBlockIsShared(const LoadedRom& rom,
                        const SoundRecord& selected) {
     if (selected.loopControlOffset == 0) return false;
@@ -2509,6 +2532,27 @@ bool ReplaceSoundPcm(LoadedRom& rom,
     result.sizeOverrideUsed = overrideUsed;
 
     if (rebuiltTbl.size() > allowedTblCapacity) {
+        // Normal replacement now follows the same safe path as Add Sound and
+        // ROM migration: when the bank is genuinely full, relocate it and
+        // patch every traced CTL/TBL ASM reference instead of asking the user
+        // to overwrite whatever follows the bank. Expert override remains an
+        // explicit manual path and is never silently replaced by relocation.
+        if (!options.enableSizeOverride) {
+            const uint32_t selectedBank = sound.bankId;
+            const uint32_t selectedId = sound.soundId;
+            const uint32_t shortage = static_cast<uint32_t>(rebuiltTbl.size() - allowedTblCapacity);
+            const uint32_t reserve = Align16(shortage) + 0x1000U;
+            if (!RelocateBankForExpansion(rom, selectedBank, 0U, reserve, error)) {
+                return false;
+            }
+            (void)selectedId;
+            if (!ReplaceSoundPcm(rom, sound, wav, options, result, error)) {
+                return false;
+            }
+            result.bankRelocated = true;
+            return true;
+        }
+
         const uint64_t minimumEnd = static_cast<uint64_t>(allocation.waveStartOffset) + rebuiltTbl.size();
         const uint32_t suggestedEnd = Align16(static_cast<uint32_t>(std::min<uint64_t>(minimumEnd, std::numeric_limits<uint32_t>::max())));
         std::ostringstream out;
@@ -2519,7 +2563,7 @@ bool ReplaceSoundPcm(LoadedRom& rom,
             << "\nAllowed TBL end: 0x" << Hex8(allowedWaveEnd)
             << "\nMinimum required end: 0x" << Hex8(static_cast<uint32_t>(minimumEnd))
             << "\nSuggested aligned TBL override end: 0x" << Hex8(suggestedEnd)
-            << "\n\nEnable Expert override and enter that TBL end only if you have verified the range is free.";
+            << "\n\nThe Expert override is enabled. Increase its verified range, or disable it to let AKI Sound Studio relocate the bank automatically.";
         error = out.str();
         return false;
     }
@@ -2676,6 +2720,447 @@ bool SaveRomZ64(LoadedRom& rom,
 }
 
 
+
+namespace {
+
+std::string PcmSha1(const std::vector<int16_t>& samples) {
+    Sha1 sha;
+    for (const int16_t sample : samples) {
+        const uint8_t bytes[2]{
+            static_cast<uint8_t>(sample & 0xFF),
+            static_cast<uint8_t>((static_cast<uint16_t>(sample) >> 8) & 0xFF),
+        };
+        sha.update(bytes, 2);
+    }
+    return sha.finish();
+}
+
+const SoundRecord* FindSoundRecord(const LoadedRom& rom, uint16_t bankId, uint16_t soundId) {
+    for (const auto& sound : rom.sounds) {
+        if (sound.bankId == bankId && sound.soundId == soundId) return &sound;
+    }
+    return nullptr;
+}
+
+SoundRecord* FindSoundRecord(LoadedRom& rom, uint16_t bankId, uint16_t soundId) {
+    for (auto& sound : rom.sounds) {
+        if (sound.bankId == bankId && sound.soundId == soundId) return &sound;
+    }
+    return nullptr;
+}
+
+uint32_t EffectiveRate(const LoadedRom& rom, const SoundRecord& sound) {
+    if (sound.label.rate.primaryHz && *sound.label.rate.primaryHz != 0) {
+        return *sound.label.rate.primaryHz;
+    }
+    if (sound.replacementSampleRate != 0) return sound.replacementSampleRate;
+    return rom.profile && rom.profile->mixerRateHz ? rom.profile->mixerRateHz : 22050U;
+}
+
+
+void PatchMipsAddress(std::vector<uint8_t>& rom,
+                      const AsmBankPointerReference& ref,
+                      uint32_t address) {
+    if (static_cast<uint64_t>(ref.upperInstructionOffset) + 4 > rom.size() ||
+        static_cast<uint64_t>(ref.lowerInstructionOffset) + 4 > rom.size()) return;
+    uint32_t first = ReadBe32(rom, ref.upperInstructionOffset);
+    uint32_t second = ReadBe32(rom, ref.lowerInstructionOffset);
+    const uint16_t low = static_cast<uint16_t>(address & 0xFFFFU);
+    const uint16_t high = ref.usesAddiu
+        ? static_cast<uint16_t>((address + 0x8000U) >> 16)
+        : static_cast<uint16_t>(address >> 16);
+    first = (first & 0xFFFF0000U) | high;
+    second = (second & 0xFFFF0000U) | low;
+    WriteBe32(rom, ref.upperInstructionOffset, first);
+    WriteBe32(rom, ref.lowerInstructionOffset, second);
+}
+
+bool RelocateBankForExpansion(LoadedRom& rom,
+                              uint16_t bankId,
+                              uint32_t extraCtlBytes,
+                              uint32_t extraWaveBytes,
+                              std::string& error) {
+    if (!rom.profile || rom.profile != &rom.customProfile) {
+        if (!rom.profile) { error = "No profile selected."; return false; }
+        rom.customProfile = *rom.profile;
+        rom.profile = &rom.customProfile;
+    }
+    BankDefinition* bank = nullptr;
+    for (auto& candidate : rom.customProfile.banks) {
+        if (candidate.bankId == bankId) { bank = &candidate; break; }
+    }
+    if (!bank) { error = "Bank definition not found for relocation."; return false; }
+    BankAllocation allocation;
+    if (!ComputeBankAllocation(rom, *bank, allocation, error)) return false;
+    const uint32_t oldCtl = bank->controlOffset;
+    const uint32_t oldTbl = bank->waveOffset;
+    const uint32_t ctlBytes = oldTbl - oldCtl;
+    const uint32_t tblBytes = allocation.normalWaveEndOffset - oldTbl;
+    const uint64_t newCtl64 = Align16Size(rom.z64.size());
+    const uint64_t newTbl64 = Align16Size(newCtl64 + ctlBytes + Align16(extraCtlBytes) + 0x100U);
+    const uint64_t end64 = newTbl64 + tblBytes + Align16(extraWaveBytes) + 0x100U;
+    constexpr uint64_t kMaxRom = 64ULL * 1024ULL * 1024ULL;
+    if (end64 > kMaxRom) {
+        error = "Relocating this bank for expansion would exceed the 64 MiB N64 ROM limit.";
+        return false;
+    }
+    const uint32_t newCtl = static_cast<uint32_t>(newCtl64);
+    const uint32_t newTbl = static_cast<uint32_t>(newTbl64);
+    const size_t oldSize = rom.z64.size();
+    rom.z64.resize(static_cast<size_t>(end64), 0);
+    std::copy_n(rom.z64.begin() + oldCtl, ctlBytes, rom.z64.begin() + newCtl);
+    std::copy_n(rom.z64.begin() + oldTbl, tblBytes, rom.z64.begin() + newTbl);
+
+    std::vector<BankTraceResult> traces;
+    std::string traceError;
+    if (TraceSoundBankAsmPointers(rom, traces, traceError)) {
+        for (const auto& trace : traces) {
+            if (trace.bankId != bankId) continue;
+            for (const auto& ref : trace.controlReferences) PatchMipsAddress(rom.z64, ref, newCtl);
+            for (const auto& ref : trace.waveReferences) PatchMipsAddress(rom.z64, ref, newTbl);
+        }
+    }
+    const int64_t ctlDelta = static_cast<int64_t>(newCtl) - oldCtl;
+    const int64_t tblDelta = static_cast<int64_t>(newTbl) - oldTbl;
+    for (auto& sound : rom.sounds) {
+        if (sound.bankId != bankId) continue;
+        sound.controlRecordOffset = static_cast<uint32_t>(static_cast<int64_t>(sound.controlRecordOffset) + ctlDelta);
+        if (sound.loopControlOffset) sound.loopControlOffset = static_cast<uint32_t>(static_cast<int64_t>(sound.loopControlOffset) + ctlDelta);
+        sound.waveDataOffset = static_cast<uint32_t>(static_cast<int64_t>(sound.waveDataOffset) + tblDelta);
+    }
+    bank->controlOffset = newCtl;
+    bank->waveOffset = newTbl;
+    (void)oldSize;
+    return true;
+}
+
+bool FindBlankCtlRegion(const LoadedRom& rom,
+                        const BankDefinition& bank,
+                        uint32_t bytesNeeded,
+                        uint32_t& absoluteOffset) {
+    if (bytesNeeded == 0 || bank.controlOffset >= bank.waveOffset || bank.waveOffset > rom.z64.size()) return false;
+    std::vector<ControlInterval> occupied;
+    occupied.push_back({bank.controlOffset, std::min<uint32_t>(bank.controlOffset + 0x30U, bank.waveOffset)});
+    try {
+        const uint32_t count = ReadBe32(rom.z64, bank.controlOffset + 0x20);
+        const uint32_t coarseRel = ReadBe32(rom.z64, bank.controlOffset + 0x24);
+        const uint32_t fineRel = ReadBe32(rom.z64, bank.controlOffset + 0x28);
+        const uint32_t ptrRel = ReadBe32(rom.z64, bank.controlOffset + 0x2C);
+        if (coarseRel) occupied.push_back({bank.controlOffset + coarseRel, bank.controlOffset + coarseRel + count});
+        if (fineRel) occupied.push_back({bank.controlOffset + fineRel, bank.controlOffset + fineRel + count * 4U});
+        occupied.push_back({bank.controlOffset + ptrRel, bank.controlOffset + ptrRel + count * 4U});
+        for (const auto& sound : rom.sounds) {
+            if (sound.bankId != bank.bankId) continue;
+            occupied.push_back({sound.controlRecordOffset, sound.controlRecordOffset + 0x18U});
+            if (sound.loopControlOffset) occupied.push_back({sound.loopControlOffset, sound.loopControlOffset + 0x2CU});
+            const uint32_t bookRel = ReadBe32(rom.z64, sound.controlRecordOffset + 0x10);
+            const uint32_t book = bank.controlOffset + bookRel;
+            const uint32_t bookBytes = 8U + sound.predictorOrder * sound.predictorCount * 16U;
+            occupied.push_back({book, book + bookBytes});
+        }
+    } catch (...) {
+        return false;
+    }
+    uint32_t candidate = Align16(bank.controlOffset + 0x30U);
+    for (; static_cast<uint64_t>(candidate) + bytesNeeded <= bank.waveOffset; candidate += 4U) {
+        const uint32_t end = candidate + bytesNeeded;
+        if (IntervalsOverlap(candidate, end, occupied)) continue;
+        bool blank = true;
+        for (uint32_t o = candidate; o < end; ++o) {
+            if (!IsBlankRomByte(rom.z64[o])) { blank = false; break; }
+        }
+        if (blank) { absoluteOffset = candidate; return true; }
+    }
+    return false;
+}
+
+} // namespace
+
+bool BuildWaveformIdentities(const LoadedRom& rom,
+                             std::vector<WaveformIdentity>& identities,
+                             std::string& error) {
+    identities.clear();
+    error.clear();
+    for (const auto& sound : rom.sounds) {
+        std::string decodeError;
+        auto pcm = DecodeSelectedSound(rom, sound, decodeError);
+        if (!decodeError.empty() && sound.encodedBytes >= 9U && (sound.encodedBytes % 9U) != 0U) {
+            // A few AKI tail records include non-frame trailer bytes. The game
+            // decodes complete 9-byte VADPCM frames and ignores the remainder.
+            SoundRecord completeFrames = sound;
+            completeFrames.encodedBytes -= completeFrames.encodedBytes % 9U;
+            decodeError.clear();
+            pcm = DecodeSelectedSound(rom, completeFrames, decodeError);
+        }
+        if (!decodeError.empty()) {
+            error = "Could not decode Bank " + Hex4(sound.bankId) + " / " + Hex4(sound.soundId) + ": " + decodeError;
+            identities.clear();
+            return false;
+        }
+        WaveformIdentity identity;
+        identity.bankId = sound.bankId;
+        identity.soundId = sound.soundId;
+        identity.decodedSamples = static_cast<uint32_t>(pcm.size());
+        identity.pcmSha1 = PcmSha1(pcm);
+        identities.push_back(std::move(identity));
+    }
+    return true;
+}
+
+bool FindDuplicateWaveforms(const LoadedRom& rom,
+                            std::vector<DuplicateGroup>& groups,
+                            std::string& error) {
+    groups.clear();
+    std::vector<WaveformIdentity> identities;
+    if (!BuildWaveformIdentities(rom, identities, error)) return false;
+    std::map<std::pair<std::string,uint32_t>, std::vector<WaveformIdentity>> grouped;
+    for (const auto& identity : identities) grouped[{identity.pcmSha1, identity.decodedSamples}].push_back(identity);
+    for (auto& [key, members] : grouped) {
+        if (members.size() < 2) continue;
+        DuplicateGroup group;
+        group.pcmSha1 = key.first;
+        group.decodedSamples = key.second;
+        group.members = std::move(members);
+        groups.push_back(std::move(group));
+    }
+    std::sort(groups.begin(), groups.end(), [](const auto& a, const auto& b) {
+        if (a.members.size() != b.members.size()) return a.members.size() > b.members.size();
+        return a.pcmSha1 < b.pcmSha1;
+    });
+    return true;
+}
+
+bool MatchExactWaveforms(const LoadedRom& source,
+                         const LoadedRom& target,
+                         std::vector<SoundMatch>& matches,
+                         std::string& error) {
+    matches.clear();
+    std::vector<WaveformIdentity> left, right;
+    if (!BuildWaveformIdentities(source, left, error)) return false;
+    if (!BuildWaveformIdentities(target, right, error)) return false;
+    std::multimap<std::pair<std::string,uint32_t>, WaveformIdentity> targetMap;
+    for (const auto& id : right) targetMap.emplace(std::make_pair(id.pcmSha1,id.decodedSamples), id);
+    for (const auto& src : left) {
+        auto range = targetMap.equal_range({src.pcmSha1,src.decodedSamples});
+        for (auto it = range.first; it != range.second; ++it) {
+            SoundMatch match;
+            match.sourceBankId = src.bankId;
+            match.sourceSoundId = src.soundId;
+            match.targetBankId = it->second.bankId;
+            match.targetSoundId = it->second.soundId;
+            match.pcmSha1 = src.pcmSha1;
+            match.decodedSamples = src.decodedSamples;
+            matches.push_back(std::move(match));
+        }
+    }
+    return true;
+}
+
+bool TraceSoundBankAsmPointers(const LoadedRom& rom,
+                               std::vector<BankTraceResult>& traces,
+                               std::string& error) {
+    traces.clear();
+    error.clear();
+    if (!rom.profile) { error = "No profile is selected."; return false; }
+    std::map<uint32_t,std::vector<AsmBankPointerReference>> refs;
+    for (uint32_t o = 0; static_cast<uint64_t>(o) + 8 <= rom.z64.size(); o += 4) {
+        const uint32_t first = ReadBe32(rom.z64, o);
+        if ((first >> 26) != 0x0F) continue; // LUI
+        const uint8_t rt = static_cast<uint8_t>((first >> 16) & 0x1F);
+        const uint32_t upper = (first & 0xFFFFU) << 16;
+        for (uint32_t delta : {4U, 8U, 12U}) {
+            if (static_cast<uint64_t>(o) + delta + 4 > rom.z64.size()) continue;
+            const uint32_t second = ReadBe32(rom.z64, o + delta);
+            const uint8_t op = static_cast<uint8_t>(second >> 26);
+            const uint8_t rs = static_cast<uint8_t>((second >> 21) & 0x1F);
+            const uint8_t rt2 = static_cast<uint8_t>((second >> 16) & 0x1F);
+            if (rs != rt || rt2 != rt || (op != 0x09 && op != 0x0D)) continue;
+            uint32_t resolved = 0;
+            if (op == 0x09) resolved = upper + static_cast<int16_t>(second & 0xFFFFU);
+            else resolved = upper | (second & 0xFFFFU);
+            AsmBankPointerReference ref;
+            ref.upperInstructionOffset = o;
+            ref.lowerInstructionOffset = o + delta;
+            ref.resolvedAddress = resolved;
+            ref.targetRegister = rt;
+            ref.usesAddiu = op == 0x09;
+            refs[resolved].push_back(ref);
+        }
+    }
+    for (const auto& bank : rom.profile->banks) {
+        BankTraceResult trace;
+        trace.bankId = bank.bankId;
+        trace.controlOffset = bank.controlOffset;
+        trace.waveOffset = bank.waveOffset;
+        try { trace.soundCount = ReadBe32(rom.z64, bank.controlOffset + 0x20); } catch (...) {}
+        trace.controlReferences = refs[bank.controlOffset];
+        trace.waveReferences = refs[bank.waveOffset];
+        traces.push_back(std::move(trace));
+    }
+    return true;
+}
+
+bool AppendSoundFromWav(LoadedRom& rom,
+                        uint16_t bankId,
+                        uint16_t templateSoundId,
+                        const WavPcm16& wav,
+                        const BankWriteOptions& options,
+                        BankExpansionResult& result,
+                        std::string& error) {
+    result = {};
+    error.clear();
+    if (!rom.profile) { error = "No profile is selected."; return false; }
+    const BankDefinition* bank = FindBankDefinition(rom, bankId);
+    SoundRecord* templ = FindSoundRecord(rom, bankId, templateSoundId);
+    if (!bank || !templ) { error = "The selected bank or template sound does not exist."; return false; }
+    const uint32_t oldCount = ReadBe32(rom.z64, bank->controlOffset + 0x20);
+    if (oldCount >= 0xFFFFU) { error = "The bank sound count cannot be expanded further."; return false; }
+    const uint32_t newCount = oldCount + 1U;
+    const uint32_t oldCoarseRel = ReadBe32(rom.z64, bank->controlOffset + 0x24);
+    const uint32_t oldFineRel = ReadBe32(rom.z64, bank->controlOffset + 0x28);
+    const uint32_t oldPtrRel = ReadBe32(rom.z64, bank->controlOffset + 0x2C);
+    const uint32_t bookBytes = 8U + templ->predictorOrder * templ->predictorCount * 16U;
+    const bool needsLoop = wav.hasLoop;
+    const uint32_t coarseBytes = newCount;
+    const uint32_t fineBytes = newCount * 4U;
+    const uint32_t ptrBytes = newCount * 4U;
+    uint32_t total = 0;
+    const uint32_t coarseAt = total; total += Align16(coarseBytes);
+    const uint32_t fineAt = total; total += Align16(fineBytes);
+    const uint32_t ptrAt = total; total += Align16(ptrBytes);
+    const uint32_t recordAt = total; total += Align16(0x18U);
+    const uint32_t bookAt = total; total += Align16(bookBytes);
+    const uint32_t loopAt = total; if (needsLoop) total += Align16(0x2CU);
+    uint32_t block = 0;
+    if (!FindBlankCtlRegion(rom, *bank, total, block)) {
+        const uint32_t extraWaveBytes = static_cast<uint32_t>(((wav.monoSamples.size() + 15U) / 16U) * 9U + 0x1000U);
+        if (!RelocateBankForExpansion(rom, bankId, total, extraWaveBytes, error)) return false;
+        bank = FindBankDefinition(rom, bankId);
+        templ = FindSoundRecord(rom, bankId, templateSoundId);
+        if (!bank || !templ || !FindBlankCtlRegion(rom, *bank, total, block)) {
+            error = "The bank was relocated, but the expanded metadata block could not be allocated.";
+            return false;
+        }
+    }
+    const uint32_t coarseAbs = block + coarseAt;
+    const uint32_t fineAbs = block + fineAt;
+    const uint32_t ptrAbs = block + ptrAt;
+    const uint32_t recordAbs = block + recordAt;
+    const uint32_t bookAbs = block + bookAt;
+    const uint32_t loopAbs = needsLoop ? block + loopAt : 0;
+    std::fill(rom.z64.begin() + block, rom.z64.begin() + block + total, 0);
+    if (oldCoarseRel) std::copy_n(rom.z64.begin() + bank->controlOffset + oldCoarseRel, oldCount, rom.z64.begin() + coarseAbs);
+    if (oldFineRel) std::copy_n(rom.z64.begin() + bank->controlOffset + oldFineRel, oldCount * 4U, rom.z64.begin() + fineAbs);
+    std::copy_n(rom.z64.begin() + bank->controlOffset + oldPtrRel, oldCount * 4U, rom.z64.begin() + ptrAbs);
+    rom.z64[coarseAbs + oldCount] = static_cast<uint8_t>(templ->coarseTuneSemitones & 0xFF);
+    rom.z64[fineAbs + oldCount * 4U] = static_cast<uint8_t>(templ->fineTuneCents & 0xFF);
+    WriteBe32(rom.z64, ptrAbs + oldCount * 4U, recordAbs - bank->controlOffset);
+    std::copy_n(rom.z64.begin() + templ->controlRecordOffset, 0x18U, rom.z64.begin() + recordAbs);
+    const uint32_t templateBookRel = ReadBe32(rom.z64, templ->controlRecordOffset + 0x10);
+    std::copy_n(rom.z64.begin() + bank->controlOffset + templateBookRel, bookBytes, rom.z64.begin() + bookAbs);
+    WriteBe32(rom.z64, recordAbs + 0x10, bookAbs - bank->controlOffset);
+    WriteBe32(rom.z64, recordAbs + 0x0C, needsLoop ? loopAbs - bank->controlOffset : 0U);
+    WriteBe32(rom.z64, bank->controlOffset + 0x20, newCount);
+    WriteBe32(rom.z64, bank->controlOffset + 0x24, coarseAbs - bank->controlOffset);
+    WriteBe32(rom.z64, bank->controlOffset + 0x28, fineAbs - bank->controlOffset);
+    WriteBe32(rom.z64, bank->controlOffset + 0x2C, ptrAbs - bank->controlOffset);
+
+    SoundRecord added = *templ;
+    added.soundId = static_cast<uint16_t>(oldCount);
+    added.controlRecordOffset = recordAbs;
+    added.loopControlOffset = loopAbs;
+    added.label = {};
+    added.modified = false;
+    added.replacementEncoded.clear();
+    rom.sounds.push_back(added);
+    SoundRecord* newSound = FindSoundRecord(rom, bankId, static_cast<uint16_t>(oldCount));
+    ReplacementResult replacement;
+    if (!newSound || !ReplaceSoundPcm(rom, *newSound, wav, options, replacement, error)) {
+        return false;
+    }
+    result.bankId = bankId;
+    result.newSoundId = static_cast<uint16_t>(oldCount);
+    result.oldSoundCount = oldCount;
+    result.newSoundCount = newCount;
+    result.relocatedCoarseTableOffset = coarseAbs;
+    result.relocatedFineTableOffset = fineAbs;
+    result.relocatedPointerTableOffset = ptrAbs;
+    result.newControlRecordOffset = recordAbs;
+    result.newPredictorBookOffset = bookAbs;
+    result.newLoopOffset = loopAbs;
+    result.replacement = replacement;
+    return true;
+}
+
+bool MigrateSoundToSlot(const LoadedRom& sourceRom,
+                        const SoundRecord& sourceSound,
+                        LoadedRom& targetRom,
+                        SoundRecord& targetSound,
+                        const MigrationOptions& options,
+                        MigrationResult& result,
+                        std::string& error) {
+    result = {};
+    error.clear();
+    std::string decodeError;
+    auto pcm = DecodeSelectedSound(sourceRom, sourceSound, decodeError);
+    if (!decodeError.empty()) { error = decodeError; return false; }
+    WavPcm16 wav;
+    wav.sampleRate = EffectiveRate(sourceRom, sourceSound);
+    wav.sourceChannels = 1;
+    wav.monoSamples = std::move(pcm);
+    if (sourceSound.loopEnd > sourceSound.loopStart && sourceSound.loopEnd <= wav.monoSamples.size()) {
+        wav.loopMetadataPresent = true;
+        wav.hasLoop = true;
+        wav.loopStart = sourceSound.loopStart;
+        wav.loopEnd = sourceSound.loopEnd;
+        wav.loopCount = sourceSound.loopCount;
+    }
+    result.sourceRateHz = wav.sampleRate;
+    result.targetRateHz = EffectiveRate(targetRom, targetSound);
+    if (options.resampleToTargetRate && result.targetRateHz && wav.sampleRate != result.targetRateHz) {
+        WavPcm16 converted;
+        if (!ResampleWavPcm16(wav, result.targetRateHz, converted, error)) return false;
+        wav = std::move(converted);
+        result.resampled = true;
+    }
+    if (!ApplyWavGain(wav, options.gainDb, options.preventClipping, result.gain, error)) return false;
+    if (!ReplaceSoundPcm(targetRom, targetSound, wav, options.bankWrite, result.replacement, error)) {
+        if (error.find("TBL is too large") == std::string::npos || options.bankWrite.enableSizeOverride) return false;
+        const uint16_t bankId = targetSound.bankId;
+        const uint16_t soundId = targetSound.soundId;
+        const uint32_t extraWaveBytes = static_cast<uint32_t>(((wav.monoSamples.size() + 15U) / 16U) * 9U + 0x2000U);
+        std::string relocateError;
+        if (!RelocateBankForExpansion(targetRom, bankId, 0x100U, extraWaveBytes, relocateError)) {
+            error += " Automatic bank relocation also failed: " + relocateError;
+            return false;
+        }
+        SoundRecord* relocatedTarget = FindSoundRecord(targetRom, bankId, soundId);
+        if (!relocatedTarget || !ReplaceSoundPcm(targetRom, *relocatedTarget, wav, options.bankWrite, result.replacement, error)) return false;
+    }
+    return true;
+}
+
+bool ExportWaveformAnalysisCsv(const LoadedRom& rom,
+                               const std::filesystem::path& path,
+                               std::string& error) {
+    std::vector<WaveformIdentity> identities;
+    if (!BuildWaveformIdentities(rom, identities, error)) return false;
+    std::map<std::pair<std::string,uint32_t>, size_t> counts;
+    for (const auto& i : identities) ++counts[{i.pcmSha1,i.decodedSamples}];
+    std::ofstream out(path, std::ios::binary);
+    if (!out) { error = "Could not create waveform-analysis CSV."; return false; }
+    out << "bank,id,name,decoded_samples,pcm_sha1,duplicate_count\n";
+    for (const auto& i : identities) {
+        const auto* sound = FindSoundRecord(rom, i.bankId, i.soundId);
+        out << "0x" << Hex4(i.bankId) << ",0x" << Hex4(i.soundId) << ","
+            << CsvEscape(sound ? sound->label.name : std::string{}) << ","
+            << i.decodedSamples << "," << i.pcmSha1 << ","
+            << counts[{i.pcmSha1,i.decodedSamples}] << "\n";
+    }
+    if (!out) { error = "Failed while writing waveform-analysis CSV."; return false; }
+    return true;
+}
+
 bool AutoDetectSoundBankLocations(LoadedRom& rom, std::string& error) {
     error.clear();
     if (!rom.profile) {
@@ -2686,42 +3171,52 @@ bool AutoDetectSoundBankLocations(LoadedRom& rom, std::string& error) {
     rom.profile = &rom.customProfile;
 
     const auto candidates = FindPtrTableCandidates(rom.z64);
-    if (candidates.empty()) {
-        error = "No N64 PtrTablesV2 control blocks were found.";
+    const auto waveCandidates = FindWaveTableCandidates(rom.z64);
+    if (candidates.empty() || waveCandidates.empty()) {
+        error = "No complete PtrTablesV2/WaveTables bank pairs were found.";
         return false;
     }
 
-    std::set<uint32_t> used;
+    std::set<uint32_t> usedControls;
+    std::set<uint32_t> usedWaves;
     for (auto& bank : rom.customProfile.banks) {
         const uint32_t expectedCount = ExpectedSoundCount(rom.customProfile.id, bank.bankId);
-        const int64_t waveDelta = static_cast<int64_t>(bank.waveOffset) - bank.controlOffset;
         const int64_t sequenceDelta = bank.sequenceObjectOffset == 0
             ? 0
             : static_cast<int64_t>(bank.sequenceObjectOffset) - bank.controlOffset;
-
         uint32_t bestControl = 0;
-        for (const uint32_t candidate : candidates) {
-            if (used.count(candidate)) continue;
-            const int64_t guessedWave = static_cast<int64_t>(candidate) + waveDelta;
-            if (guessedWave <= 0 || guessedWave > static_cast<int64_t>(rom.z64.size())) continue;
-            if (!LooksLikeAkiBankAt(rom.z64, candidate, expectedCount, static_cast<uint32_t>(guessedWave))) continue;
-            bestControl = candidate;
-            break;
+        uint32_t bestWave = 0;
+        uint64_t bestDistance = std::numeric_limits<uint64_t>::max();
+        for (const uint32_t control : candidates) {
+            if (usedControls.count(control)) continue;
+            if (ReadBe32(rom.z64, control + 0x20) != expectedCount) continue;
+            for (const uint32_t wave : waveCandidates) {
+                if (usedWaves.count(wave) || wave <= control) continue;
+                if (!LooksLikeAkiBankAt(rom.z64, control, expectedCount, wave)) continue;
+                const uint64_t distance = static_cast<uint64_t>(wave) - control;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestControl = control;
+                    bestWave = wave;
+                }
+            }
         }
-        if (bestControl == 0) {
-            error = "Could not auto-detect control block for bank " + Hex4(bank.bankId) +
-                    " with the expected sound count " + std::to_string(expectedCount) + ".";
+        if (bestControl == 0 || bestWave == 0) {
+            error = "Could not auto-detect a structurally valid CTL/TBL pair for bank " +
+                    Hex4(bank.bankId) + " with " + std::to_string(expectedCount) + " sounds.";
             return false;
         }
-        used.insert(bestControl);
+        usedControls.insert(bestControl);
+        usedWaves.insert(bestWave);
+        const uint32_t oldControl = bank.controlOffset;
         bank.controlOffset = bestControl;
-        bank.waveOffset = static_cast<uint32_t>(static_cast<int64_t>(bestControl) + waveDelta);
+        bank.waveOffset = bestWave;
         if (bank.sequenceObjectOffset != 0) {
             const int64_t guessedSequence = static_cast<int64_t>(bestControl) + sequenceDelta;
             bank.sequenceObjectOffset = guessedSequence > 0 && guessedSequence < static_cast<int64_t>(rom.z64.size())
-                ? static_cast<uint32_t>(guessedSequence)
-                : 0;
+                ? static_cast<uint32_t>(guessedSequence) : 0;
         }
+        (void)oldControl;
     }
     return true;
 }

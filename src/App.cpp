@@ -28,7 +28,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.6.0";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.1";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -68,6 +68,10 @@ constexpr int ID_FILE_IMPORT_PROFILE = 40010;
 constexpr int ID_FILE_EXPORT_PROFILE = 40011;
 constexpr int ID_TOOLS_AUTODETECT = 40012;
 constexpr int ID_EDIT_APPLY_METADATA = 40013;
+constexpr int ID_TOOLS_TRACE_ASM = 40014;
+constexpr int ID_TOOLS_ANALYZE_WAVES = 40015;
+constexpr int ID_TOOLS_APPEND_SOUND = 40016;
+constexpr int ID_TOOLS_MIGRATE_ROM = 40017;
 
 struct AppState {
     HWND mainWindow = nullptr;
@@ -440,13 +444,26 @@ std::wstring SoundDetails(const aki::SoundRecord& sound) {
         out << L"  TBL: 0x" << Utf8ToWide(aki::Hex8(allocation.waveStartOffset))
             << L" - 0x" << Utf8ToWide(aki::Hex8(allocation.normalWaveEndOffset))
             << L" (0x" << Utf8ToWide(aki::Hex8(allocation.normalWaveCapacityBytes())) << L" bytes)\r\n";
+        const uint32_t usedBytes = allocation.normalWaveCapacityBytes();
+        const uint32_t availableBytes =
+            allocation.safeWaveEndOffset - allocation.waveStartOffset;
+        const uint32_t freeBytes =
+            allocation.safeWaveEndOffset - allocation.normalWaveEndOffset;
+        out << L"  Capacity used: " << usedBytes << L" bytes\r\n";
+        out << L"  Capacity available in place: " << availableBytes << L" bytes\r\n";
+        out << L"  Free in-place growth: " << freeBytes << L" bytes\r\n";
+        out << L"  Status: "
+            << (freeBytes == 0
+                    ? L"Full - relocation required for any growth"
+                    : (freeBytes < 0x100U
+                           ? L"Effectively full - relocation expected for meaningful growth"
+                           : L"In-place growth available"))
+            << L"\r\n";
         if (allocation.safeWaveEndOffset > allocation.normalWaveEndOffset) {
             out << L"  Safe trailing TBL padding through 0x"
                 << Utf8ToWide(aki::Hex8(allocation.safeWaveEndOffset))
                 << L" (+0x"
-                << Utf8ToWide(aki::Hex8(
-                       allocation.safeWaveEndOffset -
-                       allocation.normalWaveEndOffset))
+                << Utf8ToWide(aki::Hex8(freeBytes))
                 << L" bytes)\r\n";
         }
     }
@@ -574,6 +591,22 @@ bool LoadLabelsForCurrentRom(std::string& error) {
             return false;
     }
     return gApp.labels.loadCsv(gApp.dataDirectory / filename, &error);
+}
+
+
+bool LoadLabelsForRom(const aki::LoadedRom& rom,
+                      aki::LabelDatabase& database,
+                      std::string& error) {
+    if (!rom.profile) { error = "No profile selected."; return false; }
+    const wchar_t* filename = nullptr;
+    switch (rom.profile->id) {
+        case aki::GameId::WrestleMania2000: filename = L"wm2k_sounds.csv"; break;
+        case aki::GameId::VirtualProWrestling2: filename = L"vpw2_sounds.csv"; break;
+        case aki::GameId::RevengeRedux: filename = L"revenge_redux_sounds.csv"; break;
+        case aki::GameId::NoMercy: filename = L"no_mercy_sounds.csv"; break;
+        default: error = "No label database is configured for the source ROM."; return false;
+    }
+    return database.loadCsv(gApp.dataDirectory / filename, &error);
 }
 
 void LoadRomFromPath(const std::filesystem::path& path) {
@@ -897,6 +930,158 @@ void ReplaceSelectedWav() {
     SetStatus(status.str());
 }
 
+
+void TraceAsmPointers() {
+    if (!gApp.romLoaded) return;
+    std::vector<aki::BankTraceResult> traces;
+    std::string error;
+    if (!aki::TraceSoundBankAsmPointers(gApp.rom, traces, error)) {
+        ShowError(Utf8ToWide(error));
+        return;
+    }
+    std::wostringstream out;
+    out << L"ASM bank-pointer trace\r\n\r\n";
+    for (const auto& trace : traces) {
+        out << L"Bank " << Utf8ToWide(aki::Hex4(trace.bankId))
+            << L"  CTL 0x" << Utf8ToWide(aki::Hex8(trace.controlOffset))
+            << L" (" << trace.controlReferences.size() << L" refs)"
+            << L"  TBL 0x" << Utf8ToWide(aki::Hex8(trace.waveOffset))
+            << L" (" << trace.waveReferences.size() << L" refs)\r\n";
+        for (const auto& ref : trace.controlReferences) {
+            out << L"  CTL: LUI 0x" << Utf8ToWide(aki::Hex8(ref.upperInstructionOffset))
+                << L" + low 0x" << Utf8ToWide(aki::Hex8(ref.lowerInstructionOffset)) << L"\r\n";
+        }
+        for (const auto& ref : trace.waveReferences) {
+            out << L"  TBL: LUI 0x" << Utf8ToWide(aki::Hex8(ref.upperInstructionOffset))
+                << L" + low 0x" << Utf8ToWide(aki::Hex8(ref.lowerInstructionOffset)) << L"\r\n";
+        }
+        out << L"\r\n";
+    }
+    ShowInfo(out.str());
+}
+
+void ExportWaveformAnalysis() {
+    if (!gApp.romLoaded) return;
+    const std::wstring path = SaveFileDialog(
+        L"Export waveform identity and duplicate analysis",
+        L"CSV files (*.csv)\0*.csv\0All files (*.*)\0*.*\0",
+        L"csv", L"AKISoundStudio-waveform-analysis.csv");
+    if (path.empty()) return;
+    SetStatus(L"Decoding and hashing every waveform...");
+    UpdateWindow(gApp.mainWindow);
+    std::string error;
+    if (!aki::ExportWaveformAnalysisCsv(gApp.rom, path, error)) {
+        ShowError(Utf8ToWide(error));
+        return;
+    }
+    std::vector<aki::DuplicateGroup> groups;
+    if (!aki::FindDuplicateWaveforms(gApp.rom, groups, error)) {
+        ShowError(Utf8ToWide(error));
+        return;
+    }
+    size_t duplicateRows = 0;
+    for (const auto& group : groups) duplicateRows += group.members.size();
+    SetStatus(L"Waveform analysis exported: " + std::to_wstring(groups.size()) +
+              L" duplicate groups covering " + std::to_wstring(duplicateRows) + L" sound rows.");
+}
+
+void AppendSelectedSoundFromWav() {
+    const auto selected = SelectedSoundIndex();
+    if (!selected) { ShowInfo(L"Select the sound whose predictor/tuning metadata should be used as the new entry template."); return; }
+    const std::wstring selectedPath = OpenWavDialog();
+    if (selectedPath.empty()) return;
+    aki::WavPcm16 wav;
+    std::string error;
+    if (!aki::ReadPcm16Wav(selectedPath, wav, error)) { ShowError(Utf8ToWide(error)); return; }
+    auto& templ = gApp.rom.sounds[*selected];
+    const uint32_t expectedRate = SelectedRateOrZero();
+    if (expectedRate && wav.sampleRate != expectedRate) {
+        const int choice = MessageBoxW(gApp.mainWindow,
+            (L"The WAV rate differs from the template sound. Resample to " + std::to_wstring(expectedRate) + L" Hz before appending?").c_str(),
+            kAppTitle, MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (choice == IDCANCEL) return;
+        if (choice == IDYES) {
+            aki::WavPcm16 converted;
+            if (!aki::ResampleWavPcm16(wav, expectedRate, converted, error)) { ShowError(Utf8ToWide(error)); return; }
+            wav = std::move(converted);
+        }
+    }
+    double gainDb = 0.0;
+    if (!ReadImportGain(gainDb)) return;
+    aki::GainResult gain;
+    if (!aki::ApplyWavGain(wav, gainDb, Button_GetCheck(gApp.preventClipCheck) == BST_CHECKED, gain, error)) {
+        ShowError(Utf8ToWide(error)); return;
+    }
+    aki::BankWriteOptions writeOptions;
+    std::wstring optionError;
+    if (!CurrentBankWriteOptions(writeOptions, optionError)) { ShowError(optionError); return; }
+    aki::BankExpansionResult result;
+    if (!aki::AppendSoundFromWav(gApp.rom, templ.bankId, templ.soundId, wav, writeOptions, result, error)) {
+        ShowError(Utf8ToWide(error)); return;
+    }
+    gApp.dirty = true;
+    UpdateSaveAction();
+    RefreshSoundList();
+    SetStatus(L"Expanded Bank " + Utf8ToWide(aki::Hex4(result.bankId)) + L" from " +
+              std::to_wstring(result.oldSoundCount) + L" to " + std::to_wstring(result.newSoundCount) +
+              L" sounds. New ID: " + Utf8ToWide(aki::Hex4(result.newSoundId)) + L". Save the ROM to keep it.");
+}
+
+void MigrateFromAnotherRom() {
+    const auto selected = SelectedSoundIndex();
+    if (!selected) { ShowInfo(L"Select the destination sound slot first."); return; }
+    const std::wstring sourcePath = OpenRomDialog();
+    if (sourcePath.empty()) return;
+    aki::LoadedRom source;
+    std::string error;
+    if (!aki::LoadRom(sourcePath, source, error)) { ShowError(Utf8ToWide(error)); return; }
+    aki::LabelDatabase sourceLabels;
+    std::string labelError;
+    LoadLabelsForRom(source, sourceLabels, labelError);
+    if (!aki::ParseAkiBanks(source, &sourceLabels, error)) { ShowError(Utf8ToWide(error)); return; }
+    auto& target = gApp.rom.sounds[*selected];
+    const aki::SoundRecord* chosen = nullptr;
+    if (!target.label.name.empty()) {
+        for (const auto& candidate : source.sounds) {
+            if (candidate.label.name == target.label.name) {
+                if (chosen) { chosen = nullptr; break; }
+                chosen = &candidate;
+            }
+        }
+    }
+    if (!chosen) {
+        for (const auto& candidate : source.sounds) {
+            if (candidate.bankId == target.bankId && candidate.soundId == target.soundId) { chosen = &candidate; break; }
+        }
+    }
+    if (!chosen) {
+        ShowError(L"No unique same-name match or same Bank/ID sound was found in the source ROM. Export the waveform-match reports to identify the source entry first.");
+        return;
+    }
+    std::wostringstream prompt;
+    prompt << L"Migrate source Bank " << Utf8ToWide(aki::Hex4(chosen->bankId)) << L" / "
+           << Utf8ToWide(aki::Hex4(chosen->soundId)) << L" " << Utf8ToWide(chosen->label.name)
+           << L"\r\ninto destination Bank " << Utf8ToWide(aki::Hex4(target.bankId)) << L" / "
+           << Utf8ToWide(aki::Hex4(target.soundId)) << L"?\r\n\r\n"
+           << L"The source PCM and loop points will be decoded, resampled to the destination rate, amplified using the current Gain dB setting, and re-encoded with the destination predictor book.";
+    if (MessageBoxW(gApp.mainWindow, prompt.str().c_str(), kAppTitle, MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
+    aki::MigrationOptions options;
+    if (!ReadImportGain(options.gainDb)) return;
+    options.preventClipping = Button_GetCheck(gApp.preventClipCheck) == BST_CHECKED;
+    std::wstring optionError;
+    if (!CurrentBankWriteOptions(options.bankWrite, optionError)) { ShowError(optionError); return; }
+    aki::MigrationResult result;
+    if (!aki::MigrateSoundToSlot(source, *chosen, gApp.rom, target, options, result, error)) {
+        ShowError(Utf8ToWide(error)); return;
+    }
+    gApp.dirty = true;
+    UpdateSaveAction();
+    RefreshSoundList();
+    SetStatus(L"Migrated sound from " + source.sourcePath.filename().wstring() +
+              L"; source " + std::to_wstring(result.sourceRateHz) + L" Hz, destination " +
+              std::to_wstring(result.targetRateHz) + L" Hz" + (result.resampled ? L" (resampled)." : L"."));
+}
+
 void SavePatchedRom() {
     if (!gApp.romLoaded) return;
     if (!gApp.dirty) {
@@ -1090,7 +1275,7 @@ void OpenExportFolder() {
 
 void ShowAbout() {
     const wchar_t* text =
-        L"AKI Sound Studio 0.6.0\r\n\r\n"
+        L"AKI Sound Studio 0.7.1\r\n\r\n"
         L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, WCW/nWo Revenge Redux, and WWF No Mercy.\r\n\r\n"
         L"Current features:\r\n"
         L"• Stock and compatible-hack ROM detection\r\n"
@@ -1100,7 +1285,7 @@ void ShowAbout() {
         L"• two-point WAV loop markers with rebuilt ADPCM loop state\r\n"
         L"• Hack profile CSV import/export and relocated-bank auto-detection\r\n"
         L"• Big-endian .z64 save-as with CIC-6102 CRC repair\r\n\r\n"
-        L"Version 0.6.1 adds WWF No Mercy Rev 1 support with ROM-traced bank and sequence locations, ROM-derived playback rates where fixed script references exist, and labels copied only from exact decoded-audio matches to supported games.";
+        L"Version 0.7.1 adds full-bank capacity reporting, modified-bank detection with non-frame trailer compatibility, and automatic relocation for ordinary oversized replacements as well as added or migrated sounds.";
     MessageBoxW(gApp.mainWindow, text, kAppTitle, MB_OK | MB_ICONINFORMATION);
 }
 
@@ -1233,6 +1418,11 @@ HMENU CreateAppMenu() {
     HMENU tools = CreatePopupMenu();
     AppendMenuW(tools, MF_STRING, ID_EDIT_APPLY_METADATA, L"Apply selected list &edit");
     AppendMenuW(tools, MF_STRING, ID_TOOLS_AUTODETECT, L"Auto-detect sound &locations");
+    AppendMenuW(tools, MF_STRING, ID_TOOLS_TRACE_ASM, L"Trace CTL/TBL &ASM pointers");
+    AppendMenuW(tools, MF_STRING, ID_TOOLS_ANALYZE_WAVES, L"Export waveform identity / &duplicates...");
+    AppendMenuW(tools, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(tools, MF_STRING, ID_TOOLS_APPEND_SOUND, L"&Add new sound to selected bank...");
+    AppendMenuW(tools, MF_STRING, ID_TOOLS_MIGRATE_ROM, L"&Migrate into selected slot from ROM...");
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(tools), L"&Tools");
 
     HMENU playback = CreatePopupMenu();
@@ -1268,6 +1458,10 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             else if (id == ID_FILE_IMPORT_PROFILE) ImportHackProfileCsv();
             else if (id == ID_FILE_EXPORT_PROFILE) ExportHackProfileCsv();
             else if (id == ID_TOOLS_AUTODETECT) AutoDetectSoundLocations();
+            else if (id == ID_TOOLS_TRACE_ASM) TraceAsmPointers();
+            else if (id == ID_TOOLS_ANALYZE_WAVES) ExportWaveformAnalysis();
+            else if (id == ID_TOOLS_APPEND_SOUND) AppendSelectedSoundFromWav();
+            else if (id == ID_TOOLS_MIGRATE_ROM) MigrateFromAnotherRom();
             else if (id == IDC_EXPORT_WAV || id == ID_FILE_EXPORT_WAV) ExportSelectedWav();
             else if (id == IDC_PLAY || id == ID_PLAY_SELECTED) PlaySelected();
             else if (id == IDC_STOP || id == ID_STOP_PLAYBACK) StopPlayback();

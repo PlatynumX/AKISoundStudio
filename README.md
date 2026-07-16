@@ -1,4 +1,4 @@
-# AKI Sound Studio v0.6.0
+# AKI Sound Studio v0.7.1
 
 Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, **WCW/nWo Revenge Redux**, and **WWF No Mercy (USA) Rev 1**.
 
@@ -21,16 +21,43 @@ Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pr
 - Auto-detects relocated AKI sound bank locations when the known stock offsets no longer contain control banks.
 
 
+
+
+## v0.7.1 full-bank relocation hardening
+
+- Modified WM2000 banks with one-to-eight non-frame trailer bytes are accepted and decoded by complete VADPCM frames.
+- The details panel reports used, available, and free in-place TBL capacity and clearly marks effectively full banks.
+- Ordinary oversized replacements now relocate a full bank automatically and patch traced CTL/TBL ASM references; relocation is no longer limited to Add Sound and ROM Migration.
+- Validated against the Badd Blood WM2000 hack: its shifted entrance bank has exactly 6 bytes of in-place growth, is detected automatically, and relocates without changing the occupied data immediately after the original TBL.
+
+## v0.7.0 bank expansion, tracing, analysis, and migration
+
+- **Add new sound to selected bank** relocates the bank when necessary, expands the PtrTablesV2 count, relocates the coarse/fine tuning and record-pointer tables, clones a chosen predictor-book template, writes optional WAV loop markers, repacks the TBL, and patches every traced MIPS CTL/TBL pointer.
+- ROMs smaller than 64 MiB can grow up to the N64 64 MiB limit. A bank already at the limit must have verified internal free space or an expert relocation plan.
+- **Automatic ASM pointer tracing** scans MIPS `lui` plus `addiu`/`ori` address construction, including signed-low-half correction, and reports all code references to each CTL and TBL.
+- Relocated-bank detection now pairs `N64 PtrTablesV2` and `N64 WaveTables` structures independently instead of assuming the original CTL-to-TBL distance remains unchanged.
+- **Waveform analysis** decodes every sound, hashes exact PCM, exports stable identities, and identifies duplicate groups within the loaded ROM. Non-frame trailer bytes on unusual tail records are ignored exactly as the decoder ignores incomplete VADPCM frames.
+- **Exact cross-game matching** compares decoded PCM length and SHA-1 identity. This is the same evidence standard used for No Mercy and Revenge Redux labels; IDs alone are never considered a match.
+- **Migrate into selected slot from ROM** loads another supported game, finds a unique same-name source or falls back to the same Bank/ID, decodes its PCM, preserves its two loop markers, converts to the target rate, applies the current import gain/clipping setting, encodes with the target predictor book, and automatically relocates the target bank when normal capacity is insufficient.
+- All loop UI and documentation use the generic term **WAV loop markers**.
+
+### New Tools menu commands
+
+- `Trace CTL/TBL ASM pointers`
+- `Export waveform identity / duplicates...`
+- `Add new sound to selected bank...`
+- `Migrate into selected slot from ROM...`
+
 ## Android/Termux repository updater
 
-Place `AKISoundStudio-v0.6.0-source-import-gain.zip` and `update_aki_sound_studio_v060_import_gain_termux.sh` on the phone, then run:
+Place `AKISoundStudio-v0.7.1-source-full-bank-relocation.zip` and `update_aki_sound_studio_v071_full_bank_relocation_termux.sh` on the phone, then run:
 
 ```bash
 termux-setup-storage
-bash ~/storage/downloads/update_aki_sound_studio_v060_import_gain_termux.sh
+bash ~/storage/downloads/update_aki_sound_studio_v071_full_bank_relocation_termux.sh
 ```
 
-The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.6.0-win64.zip`.
+The updater searches common Android shared-storage locations, updates or creates the public `AKISoundStudio` GitHub repository, runs the Windows GitHub Actions build, and downloads `AKISoundStudio-v0.7.1-win64.zip`.
 
 ## Editable list entries
 
