@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AKISoundStudio VERSION 0.7.2.1 LANGUAGES CXX)
+project(AKISoundStudio VERSION 0.7.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,6 +27,7 @@ if(WIN32)
             "${CMAKE_SOURCE_DIR}/data/vpw2_sounds.csv"
             "${CMAKE_SOURCE_DIR}/data/wm2k_sounds.csv"
             "${CMAKE_SOURCE_DIR}/data/revenge_redux_sounds.csv"
+            "${CMAKE_SOURCE_DIR}/data/revenge_redux_entrance_themes.csv"
             "${CMAKE_SOURCE_DIR}/data/no_mercy_sounds.csv"
             "$<TARGET_FILE_DIR:AKISoundStudio>/data"
         VERBATIM

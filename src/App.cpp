@@ -28,7 +28,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.2";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.3";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -1273,7 +1273,7 @@ void OpenExportFolder() {
 
 void ShowAbout() {
     const wchar_t* text =
-        L"AKI Sound Studio 0.7.2\r\n\r\n"
+        L"AKI Sound Studio 0.7.3\r\n\r\n"
         L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, WCW/nWo Revenge Redux, and WWF No Mercy.\r\n\r\n"
         L"Current features:\r\n"
         L"• Stock and compatible-hack ROM detection\r\n"
@@ -1283,7 +1283,7 @@ void ShowAbout() {
         L"• two-point WAV loop markers with rebuilt ADPCM loop state\r\n"
         L"• Hack profile CSV import/export and relocated-bank auto-detection\r\n"
         L"• Big-endian .z64 save-as with CIC-6102 CRC repair\r\n\r\n"
-        L"Version 0.7.2 validates WAV loop-marker handling against a real-world fixture, including inclusive RIFF smpl end conversion, loop preview segmentation, resampling, injection loop-state rebuilding, and marker-preserving export.";
+        L"Version 0.7.3 adds the verified Revenge Redux entrance-theme map as a separate selector/theme namespace without overwriting PtrTablesV2 waveform labels.";
     MessageBoxW(gApp.mainWindow, text, kAppTitle, MB_OK | MB_ICONINFORMATION);
 }
 

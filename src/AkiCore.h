@@ -41,6 +41,13 @@ struct BankDefinition {
     std::string description;
 };
 
+
+struct EntranceThemeDefinition {
+    uint16_t selectorId = 0;
+    uint16_t themeId = 0;
+    std::string name;
+};
+
 struct GameProfile {
     GameId id = GameId::Unknown;
     std::string gameCode;
@@ -48,6 +55,7 @@ struct GameProfile {
     std::string knownSha1;
     uint32_t mixerRateHz = 0;
     std::vector<BankDefinition> banks;
+    std::vector<EntranceThemeDefinition> entranceThemes;
 };
 
 struct RateInfo {
@@ -264,6 +272,8 @@ private:
 const GameProfile& WrestleMania2000Profile();
 const GameProfile& VirtualProWrestling2Profile();
 const GameProfile& RevengeReduxProfile();
+const EntranceThemeDefinition* FindEntranceThemeBySelector(const GameProfile& profile, uint16_t selectorId);
+const EntranceThemeDefinition* FindEntranceThemeByThemeId(const GameProfile& profile, uint16_t themeId);
 const GameProfile& NoMercyProfile();
 const GameProfile* DetectProfile(const std::string& gameCode);
 

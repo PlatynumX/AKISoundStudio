@@ -787,6 +787,24 @@ int main(int argc, char** argv) {
               << " / " << aki::Hex4(target->soundId)
               << " -> " << decoded.size() << " PCM samples\n";
     std::cout << "Round-trip encoder SNR: " << snr << " dB\n";
+    
+    // v0.7.3 Revenge Redux entrance-theme metadata uses a separate namespace
+    // from PtrTablesV2 waveform IDs. Do not overwrite waveform labels with these names.
+    {
+        const auto& reduxProfile = aki::RevengeReduxProfile();
+        if (reduxProfile.entranceThemes.size() != 69)
+            return Fail("Redux entrance-theme map should contain 69 entries");
+        const auto* firstTheme = aki::FindEntranceThemeBySelector(reduxProfile, 0x3F00);
+        if (!(firstTheme && firstTheme->themeId == 0x18 && firstTheme->name == "nWo"))
+            return Fail("Redux entrance-theme first entry mismatch");
+        const auto* lastTheme = aki::FindEntranceThemeBySelector(reduxProfile, 0x3F44);
+        if (!(lastTheme && lastTheme->themeId == 0x5C && lastTheme->name == "Bam Bam"))
+            return Fail("Redux entrance-theme last entry mismatch");
+        const auto* crow = aki::FindEntranceThemeByThemeId(reduxProfile, 0x1C);
+        if (!(crow && crow->selectorId == 0x3F04 && crow->name == "Sting (Crow)"))
+            return Fail("Redux entrance-theme reverse lookup mismatch");
+    }
+
     std::cout << "Repaired CRC: " << aki::Hex8(crc1)
               << " / " << aki::Hex8(crc2) << "\n";
     return 0;

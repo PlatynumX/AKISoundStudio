@@ -1,6 +1,12 @@
-# AKI Sound Studio v0.7.2a
+# AKI Sound Studio v0.7.3
 
 Windows-only AKI N64 sound-bank tool for **WWF WrestleMania 2000**, **Virtual Pro Wrestling 2**, **WCW/nWo Revenge Redux**, and **WWF No Mercy (USA) Rev 1**.
+
+## v0.7.3 Revenge Redux entrance-theme map
+
+The Revenge Redux built-in profile now carries a verified 69-entry entrance-theme map supplied for the project. The map preserves three distinct values for each entry: the `3Fxx` entrance selector, the `18`-`5C` theme ID, and the human-readable theme name.
+
+This is intentionally stored separately from PtrTablesV2 waveform IDs. Theme ID `1E`, for example, is not treated as Bank 01 waveform `001E`, so existing SFX labels are not overwritten. The mapping is also included as `data/revenge_redux_entrance_themes.csv` for reference and future editor integration.
 
 ## v0.7.2a fixture packaging fix
 

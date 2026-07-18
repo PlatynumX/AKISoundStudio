@@ -1016,6 +1016,7 @@ const GameProfile& WrestleMania2000Profile() {
             {1, 0x012B34E0, 0x012B9680, 0x012B1EB0, "Game sounds and commentary"},
             {2, 0x014407C0, 0x01442E20, 0x0143FD70, "Entrance themes"},
         },
+        {},
     };
     return profile;
 }
@@ -1037,6 +1038,7 @@ const GameProfile& VirtualProWrestling2Profile() {
             {6, 0x01E90700, 0x01E930D0, 0x01E90030, "Wrestler voices A"},
             {7, 0x01EDCAE0, 0x01EDF4B0, 0x01EDC410, "Wrestler voices B"},
         },
+        {},
     };
     return profile;
 }
@@ -1054,8 +1056,93 @@ const GameProfile& RevengeReduxProfile() {
             {1, 0x03D9715C, 0x03D9D6EC, 0x00000000,
              "Redux game sounds, voices, and additional data"},
         },
+        {
+            {0x3F00, 0x18, "nWo"},
+            {0x3F01, 0x19, "Wolfpac"},
+            {0x3F02, 0x1A, "nWo B"},
+            {0x3F03, 0x1B, "Steiners"},
+            {0x3F04, 0x1C, "Sting (Crow)"},
+            {0x3F05, 0x1D, "Lex"},
+            {0x3F06, 0x1E, "Macho Man (WCW)"},
+            {0x3F07, 0x1F, "Mortis"},
+            {0x3F08, 0x20, "Raven"},
+            {0x3F09, 0x21, "DDP"},
+            {0x3F0A, 0x22, "Goldberg"},
+            {0x3F0B, 0x23, "Bret"},
+            {0x3F0C, 0x24, "Benoit"},
+            {0x3F0D, 0x25, "Faces of Fear"},
+            {0x3F0E, 0x26, "Finlay"},
+            {0x3F0F, 0x27, "Harlem Heat"},
+            {0x3F10, 0x28, "Saturn"},
+            {0x3F11, 0x29, "Disco"},
+            {0x3F12, 0x2A, "Jim Neidhart"},
+            {0x3F13, 0x2B, "Bulldog"},
+            {0x3F14, 0x2C, "Glacier"},
+            {0x3F15, 0x2D, "Dungeon of Doom"},
+            {0x3F16, 0x2E, "Yugi"},
+            {0x3F17, 0x2F, "Nitro"},
+            {0x3F18, 0x30, "La Parka"},
+            {0x3F19, 0x31, "Jericho"},
+            {0x3F1A, 0x32, "LWO"},
+            {0x3F1B, 0x33, "Psychosis"},
+            {0x3F1C, 0x34, "Rey (Masked)"},
+            {0x3F1D, 0x35, "Malenko"},
+            {0x3F1E, 0x36, "Uiltimo"},
+            {0x3F1F, 0x37, "Alex Wright"},
+            {0x3F20, 0x38, "Chavo"},
+            {0x3F21, 0x39, "Piper"},
+            {0x3F22, 0x3A, "Boo"},
+            {0x3F23, 0x3B, "Hollywood"},
+            {0x3F24, 0x3C, "American Made"},
+            {0x3F25, 0x3D, "Surfer Sting"},
+            {0x3F26, 0x3E, "Juvi"},
+            {0x3F27, 0x3F, "Kanyon"},
+            {0x3F28, 0x40, "Bischoff"},
+            {0x3F29, 0x41, "Wrath 96"},
+            {0x3F2A, 0x42, "Scott Norton (Fire & Ice)"},
+            {0x3F2B, 0x43, "Macho Man (nWo)"},
+            {0x3F2C, 0x44, "Horsemen"},
+            {0x3F2D, 0x45, "Regal"},
+            {0x3F2E, 0x46, "Ice Train"},
+            {0x3F2F, 0x47, "Kidman"},
+            {0x3F30, 0x48, "Ernest Miller"},
+            {0x3F31, 0x49, "Jerry Flynn"},
+            {0x3F32, 0x4A, "Wrath 98"},
+            {0x3F33, 0x4B, "Eddie (Face)"},
+            {0x3F34, 0x4C, "El Dandy"},
+            {0x3F35, 0x4D, "Rey (Unmasked)"},
+            {0x3F36, 0x4E, "Super Calo"},
+            {0x3F37, 0x4F, "Jushin Liger"},
+            {0x3F38, 0x50, "Mr. JL"},
+            {0x3F39, 0x51, "Mongo"},
+            {0x3F3A, 0x52, "Duggan"},
+            {0x3F3B, 0x53, "Norman Smiley"},
+            {0x3F3C, 0x54, "Hugh Morrus"},
+            {0x3F3D, 0x55, "Big Bubba"},
+            {0x3F3E, 0x56, "Flair"},
+            {0x3F3F, 0x57, "Warrior"},
+            {0x3F40, 0x58, "Rick Rude WCW"},
+            {0x3F41, 0x59, "Dusty Rhodes WCW"},
+            {0x3F42, 0x5A, "Prince Ieakuea"},
+            {0x3F43, 0x5B, "Jeff Jarrett"},
+            {0x3F44, 0x5C, "Bam Bam"}
+        },
     };
     return profile;
+}
+
+const EntranceThemeDefinition* FindEntranceThemeBySelector(const GameProfile& profile, uint16_t selectorId) {
+    for (const auto& theme : profile.entranceThemes) {
+        if (theme.selectorId == selectorId) return &theme;
+    }
+    return nullptr;
+}
+
+const EntranceThemeDefinition* FindEntranceThemeByThemeId(const GameProfile& profile, uint16_t themeId) {
+    for (const auto& theme : profile.entranceThemes) {
+        if (theme.themeId == themeId) return &theme;
+    }
+    return nullptr;
 }
 
 const GameProfile& NoMercyProfile() {
@@ -1073,6 +1160,7 @@ const GameProfile& NoMercyProfile() {
             {2, 0x01967410, 0x01969880, 0x01965C50,
              "Entrance themes"},
         },
+        {},
     };
     return profile;
 }
