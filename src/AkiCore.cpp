@@ -2899,8 +2899,77 @@ bool RelocateBankForExpansion(LoadedRom& rom,
     if (!ComputeBankAllocation(rom, *bank, allocation, error)) return false;
     const uint32_t oldCtl = bank->controlOffset;
     const uint32_t oldTbl = bank->waveOffset;
-    const uint32_t ctlBytes = oldTbl - oldCtl;
     const uint32_t tblBytes = allocation.normalWaveEndOffset - oldTbl;
+
+    // Replacement-only growth: CTL has not grown. Keep it at its proven
+    // address and relocate only the TBL.
+    if (extraCtlBytes == 0U) {
+        const uint64_t newTbl64 = Align16Size(rom.z64.size());
+        const uint64_t end64 =
+            newTbl64 + tblBytes + Align16(extraWaveBytes) + 0x100U;
+        constexpr uint64_t kMaxRom = 64ULL * 1024ULL * 1024ULL;
+
+        if (end64 > kMaxRom) {
+            error = "Relocating this bank TBL would exceed the 64 MiB N64 ROM limit.";
+            return false;
+        }
+
+        const uint32_t newTbl = static_cast<uint32_t>(newTbl64);
+        rom.z64.resize(static_cast<size_t>(end64), 0);
+
+        std::copy_n(
+            rom.z64.begin() + oldTbl,
+            tblBytes,
+            rom.z64.begin() + newTbl);
+
+        std::vector<BankTraceResult> traces;
+        std::string traceError;
+        size_t patchedRefs = 0;
+
+        if (TraceSoundBankAsmPointers(rom, traces, traceError)) {
+            for (const auto& trace : traces) {
+                if (trace.bankId != bankId) continue;
+                for (const auto& ref : trace.waveReferences) {
+                    PatchMipsAddress(rom.z64, ref, newTbl);
+                    ++patchedRefs;
+                }
+            }
+        }
+
+        // Also catch aligned literal TBL offsets held in data tables.
+        // Never scan the old waveform payload itself.
+        for (uint32_t o = 0;
+             static_cast<uint64_t>(o) + 4U <= rom.z64.size();
+             o += 4U) {
+            if (o >= oldTbl && o < allocation.normalWaveEndOffset) continue;
+            if (ReadBe32(rom.z64, o) != oldTbl) continue;
+            WriteBe32(rom.z64, o, newTbl);
+            ++patchedRefs;
+        }
+
+        if (patchedRefs == 0) {
+            error =
+                "Refusing TBL relocation: no runtime reference to the old "
+                "TBL address was found.";
+            return false;
+        }
+
+        const int64_t tblDelta =
+            static_cast<int64_t>(newTbl) -
+            static_cast<int64_t>(oldTbl);
+
+        for (auto& sound : rom.sounds) {
+            if (sound.bankId != bankId) continue;
+            sound.waveDataOffset = static_cast<uint32_t>(
+                static_cast<int64_t>(sound.waveDataOffset) + tblDelta);
+        }
+
+        bank->waveOffset = newTbl;
+        return true;
+    }
+
+    // Actual CTL growth (such as Add Sound) retains full-bank relocation.
+    const uint32_t ctlBytes = oldTbl - oldCtl;
     const uint64_t newCtl64 = Align16Size(rom.z64.size());
     const uint64_t newTbl64 = Align16Size(newCtl64 + ctlBytes + Align16(extraCtlBytes) + 0x100U);
     const uint64_t end64 = newTbl64 + tblBytes + Align16(extraWaveBytes) + 0x100U;
