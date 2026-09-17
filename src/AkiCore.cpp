@@ -3343,113 +3343,111 @@ bool AutoDetectSoundBankLocations(LoadedRom& rom, std::string& error) {
     rom.profile = &rom.customProfile;
 
     const auto controls = FindPtrTableCandidates(rom.z64);
-    const auto waves = FindWaveTableCandidates(rom.z64);
     const size_t bankCount = rom.customProfile.banks.size();
-    if (controls.size() < bankCount || waves.size() < bankCount) {
-        error = "Not enough structurally identifiable PtrTablesV2/WaveTables candidates.";
+    if (controls.size() < bankCount) {
+        error = "Not enough N64 PtrTablesV2 candidates were found.";
         return false;
     }
 
-    const auto pairEvidence = [&](uint32_t control, uint32_t wave) -> int64_t {
-        if (!LooksLikeAkiBankAt(rom.z64, control, 0, wave)) return -1;
+    std::set<uint32_t> runtimeAddresses;
+    for (size_t off = 0; off + 20 <= rom.z64.size(); off += 4) {
+        const uint32_t first = ReadBe32(rom.z64, off);
+        if ((first >> 26) != 0x0F) continue;
+        const uint32_t reg = (first >> 16) & 0x1F;
+        const uint32_t hi = first & 0xFFFF;
+        for (size_t step = 1; step <= 4 && off + step * 4 + 4 <= rom.z64.size(); ++step) {
+            const uint32_t second = ReadBe32(rom.z64, off + step * 4);
+            const uint32_t op = second >> 26;
+            const uint32_t rs = (second >> 21) & 0x1F;
+            const uint32_t rt = (second >> 16) & 0x1F;
+            if (rs != reg || rt != reg || (op != 0x0D && op != 0x09)) continue;
+            const uint32_t imm = second & 0xFFFF;
+            uint32_t address = hi << 16;
+            if (op == 0x0D) address |= imm;
+            else {
+                const int32_t signedImm = imm < 0x8000 ? static_cast<int32_t>(imm)
+                    : static_cast<int32_t>(imm) - 0x10000;
+                address = static_cast<uint32_t>(static_cast<int64_t>(address) + signedImm);
+            }
+            if (address < rom.z64.size() && (address & 0x0F) == 0)
+                runtimeAddresses.insert(address);
+        }
+    }
+    for (uint32_t wave : FindWaveTableCandidates(rom.z64))
+        runtimeAddresses.insert(wave);
+
+    const auto strongPair = [&](uint32_t control, uint32_t wave) -> bool {
+        if (!LooksLikeAkiBankAt(rom.z64, control, 0, wave)) return false;
         const uint32_t count = ReadBe32(rom.z64, control + 0x20);
         const uint32_t tableRel = ReadBe32(rom.z64, control + 0x2C);
-        uint32_t good = 0, total = 0;
-        const uint32_t soundsToCheck = std::min<uint32_t>(count, 16);
-        for (uint32_t id = 0; id < soundsToCheck; ++id) {
-            const uint32_t recRel = ReadBe32(rom.z64, control + tableRel + id * 4U);
+        for (uint32_t id = 0; id < count; ++id) {
+            const uint64_t tableEntry = static_cast<uint64_t>(control) + tableRel + id * 4ULL;
+            if (tableEntry + 4 > rom.z64.size()) return false;
+            const uint32_t recRel = ReadBe32(rom.z64, static_cast<size_t>(tableEntry));
             const uint64_t rec = static_cast<uint64_t>(control) + recRel;
-            if (rec + 8ULL > rom.z64.size()) return -1;
+            if (rec + 0x18 > rom.z64.size()) return false;
             const uint32_t waveRel = ReadBe32(rom.z64, static_cast<size_t>(rec));
-            const uint32_t encoded = ReadBe32(rom.z64, static_cast<size_t>(rec) + 4U);
+            const uint32_t encoded = ReadBe32(rom.z64, static_cast<size_t>(rec) + 4);
+            const uint32_t bookRel = ReadBe32(rom.z64, static_cast<size_t>(rec) + 0x10);
+            const uint64_t book = static_cast<uint64_t>(control) + bookRel;
+            if (book + 8 > rom.z64.size() || encoded < 9) return false;
+            const uint32_t order = ReadBe32(rom.z64, static_cast<size_t>(book));
+            const uint32_t predictors = ReadBe32(rom.z64, static_cast<size_t>(book) + 4);
+            if (order == 0 || order > 8 || predictors == 0 || predictors > 16) return false;
+            if (book + 8ULL + static_cast<uint64_t>(order) * predictors * 16ULL > rom.z64.size())
+                return false;
             const uint64_t data = static_cast<uint64_t>(wave) + waveRel;
-            if (data + encoded > rom.z64.size()) return -1;
-            const uint32_t frames = std::min<uint32_t>(encoded / 9U, 3U);
+            if (data + encoded > rom.z64.size()) return false;
+            const uint32_t frames = std::min<uint32_t>(encoded / 9U, 8U);
+            if (frames == 0) return false;
             for (uint32_t frame = 0; frame < frames; ++frame) {
-                const uint8_t header = rom.z64[static_cast<size_t>(data + frame * 9U)];
-                ++total;
-                if ((header >> 4) <= 12 && (header & 0x0F) <= 7) ++good;
+                const uint8_t header = rom.z64[static_cast<size_t>(data + frame * 9ULL)];
+                if ((header >> 4) > 12 || (header & 0x0F) >= predictors) return false;
             }
         }
-        if (total == 0) return -1;
-        return static_cast<int64_t>(good) * 1000LL / static_cast<int64_t>(total);
+        return true;
     };
 
-    struct Pair { uint32_t control, wave, count; int64_t evidence; };
-    std::vector<std::vector<int64_t>> evidence(
-        controls.size(), std::vector<int64_t>(waves.size(), -1));
-    for (size_t c=0;c<controls.size();++c)
-        for (size_t w=0;w<waves.size();++w)
-            evidence[c][w]=pairEvidence(controls[c],waves[w]);
+    struct Pair { uint32_t control, wave, count; };
+    std::vector<Pair> pairs;
+    for (uint32_t control : controls)
+        for (uint32_t wave : runtimeAddresses)
+            if (strongPair(control, wave))
+                pairs.push_back({control, wave, ReadBe32(rom.z64, control + 0x20)});
 
-    std::vector<size_t> controlOrder(controls.size());
-    for(size_t i=0;i<controls.size();++i) controlOrder[i]=i;
-    std::sort(controlOrder.begin(),controlOrder.end(),[&](size_t a,size_t b){
-        return *std::max_element(evidence[a].begin(),evidence[a].end()) >
-               *std::max_element(evidence[b].begin(),evidence[b].end());
-    });
-    const size_t cap=std::max<size_t>(bankCount+4,12);
-    if(controlOrder.size()>cap) controlOrder.resize(cap);
-
-    std::vector<Pair> bestPairs,currentPairs;
-    std::set<size_t> usedWaves;
-    int64_t bestPairScore=std::numeric_limits<int64_t>::min();
-    std::function<void(size_t,int64_t)> pairDfs=[&](size_t pos,int64_t score){
-        if(currentPairs.size()==bankCount){
-            if(score>bestPairScore){bestPairScore=score;bestPairs=currentPairs;}
-            return;
-        }
-        if(pos>=controlOrder.size()) return;
-        if(currentPairs.size()+(controlOrder.size()-pos)<bankCount) return;
-        pairDfs(pos+1,score);
-        const size_t c=controlOrder[pos];
-        for(size_t w=0;w<waves.size();++w){
-            if(usedWaves.count(w)||evidence[c][w]<0) continue;
-            usedWaves.insert(w);
-            currentPairs.push_back({controls[c],waves[w],
-                ReadBe32(rom.z64,controls[c]+0x20),evidence[c][w]});
-            pairDfs(pos+1,score+evidence[c][w]);
-            currentPairs.pop_back(); usedWaves.erase(w);
+    std::vector<int> best(bankCount, -1), current(bankCount, -1);
+    std::set<uint32_t> usedCtl, usedWave;
+    uint64_t bestCost = std::numeric_limits<uint64_t>::max();
+    std::function<void(size_t,uint64_t)> dfs = [&](size_t bi, uint64_t cost) {
+        if (cost >= bestCost) return;
+        if (bi == bankCount) { bestCost = cost; best = current; return; }
+        const auto& bank = rom.customProfile.banks[bi];
+        const uint32_t expected = ExpectedSoundCount(rom.customProfile.id, bank.bankId);
+        for (size_t pi = 0; pi < pairs.size(); ++pi) {
+            const auto& pair = pairs[pi];
+            if (usedCtl.count(pair.control) || usedWave.count(pair.wave)) continue;
+            const uint64_t countDelta = pair.count > expected ? pair.count - expected : expected - pair.count;
+            const uint64_t ctlDelta = pair.control > bank.controlOffset ? pair.control-bank.controlOffset : bank.controlOffset-pair.control;
+            const uint64_t waveDelta = pair.wave > bank.waveOffset ? pair.wave-bank.waveOffset : bank.waveOffset-pair.wave;
+            const uint64_t pairCost = countDelta * 0x100000ULL + ctlDelta + waveDelta;
+            usedCtl.insert(pair.control); usedWave.insert(pair.wave); current[bi]=static_cast<int>(pi);
+            dfs(bi+1,cost+pairCost);
+            current[bi]=-1; usedCtl.erase(pair.control); usedWave.erase(pair.wave);
         }
     };
-    pairDfs(0,0);
-    if(bestPairs.size()!=bankCount){
-        error="Could not form a complete globally consistent CTL/TBL pairing."; return false;
+    dfs(0,0);
+    if (bestCost == std::numeric_limits<uint64_t>::max()) {
+        error = "Could not form a complete globally validated AKI CTL/TBL assignment.";
+        return false;
     }
-
-    std::vector<int> bestAssignment(bankCount,-1),assignment(bankCount,-1);
-    std::vector<bool> pairUsed(bankCount,false);
-    uint64_t bestCost=std::numeric_limits<uint64_t>::max();
-    std::function<void(size_t,uint64_t)> assignDfs=[&](size_t bi,uint64_t cost){
-        if(cost>=bestCost) return;
-        if(bi==bankCount){bestCost=cost;bestAssignment=assignment;return;}
-        const auto& bank=rom.customProfile.banks[bi];
-        const uint32_t expected=ExpectedSoundCount(rom.customProfile.id,bank.bankId);
-        for(size_t pi=0;pi<bestPairs.size();++pi){
-            if(pairUsed[pi]) continue;
-            const auto& pair=bestPairs[pi];
-            const uint64_t countDelta=pair.count>expected?pair.count-expected:expected-pair.count;
-            const uint64_t ctlDelta=pair.control>bank.controlOffset?pair.control-bank.controlOffset:bank.controlOffset-pair.control;
-            const uint64_t tblDelta=pair.wave>bank.waveOffset?pair.wave-bank.waveOffset:bank.waveOffset-pair.wave;
-            const uint64_t candidateCost=countDelta*0x100000ULL+ctlDelta+tblDelta;
-            pairUsed[pi]=true; assignment[bi]=static_cast<int>(pi);
-            assignDfs(bi+1,cost+candidateCost);
-            assignment[bi]=-1; pairUsed[pi]=false;
-        }
-    };
-    assignDfs(0,0);
-    if(bestCost==std::numeric_limits<uint64_t>::max()){
-        error="Could not globally assign detected CTL/TBL pairs to game banks."; return false;
-    }
-
-    for(size_t i=0;i<bankCount;++i){
+    for (size_t i=0;i<bankCount;++i) {
         auto& bank=rom.customProfile.banks[i];
-        const auto& pair=bestPairs[static_cast<size_t>(bestAssignment[i])];
+        const auto& pair=pairs[static_cast<size_t>(best[i])];
         const uint32_t oldControl=bank.controlOffset;
         const int64_t sequenceDelta=bank.sequenceObjectOffset==0?0:
             static_cast<int64_t>(bank.sequenceObjectOffset)-static_cast<int64_t>(oldControl);
         bank.controlOffset=pair.control; bank.waveOffset=pair.wave;
-        if(bank.sequenceObjectOffset!=0){
+        if(bank.sequenceObjectOffset!=0) {
             const int64_t guessed=static_cast<int64_t>(pair.control)+sequenceDelta;
             bank.sequenceObjectOffset=guessed>0&&guessed<static_cast<int64_t>(rom.z64.size())
                 ?static_cast<uint32_t>(guessed):0;
