@@ -3354,43 +3354,68 @@ bool AutoDetectSoundBankLocations(LoadedRom& rom, std::string& error) {
     std::set<uint32_t> usedControls;
     std::set<uint32_t> usedWaves;
     for (auto& bank : rom.customProfile.banks) {
-        const uint32_t expectedCount = ExpectedSoundCount(rom.customProfile.id, bank.bankId);
+        const uint32_t stockCount = ExpectedSoundCount(rom.customProfile.id, bank.bankId);
+        const uint32_t oldControl = bank.controlOffset;
         const int64_t sequenceDelta = bank.sequenceObjectOffset == 0
             ? 0
             : static_cast<int64_t>(bank.sequenceObjectOffset) - bank.controlOffset;
+
         uint32_t bestControl = 0;
         uint32_t bestWave = 0;
-        uint64_t bestDistance = std::numeric_limits<uint64_t>::max();
+        uint64_t bestScore = std::numeric_limits<uint64_t>::max();
+
         for (const uint32_t control : candidates) {
             if (usedControls.count(control)) continue;
-            if (ReadBe32(rom.z64, control + 0x20) != expectedCount) continue;
+            if (static_cast<uint64_t>(control) + 0x30ULL > rom.z64.size()) continue;
+
+            const uint32_t liveCount = ReadBe32(rom.z64, control + 0x20);
+            if (liveCount == 0 || liveCount > 0x10000U) continue;
+
             for (const uint32_t wave : waveCandidates) {
                 if (usedWaves.count(wave) || wave <= control) continue;
-                if (!LooksLikeAkiBankAt(rom.z64, control, expectedCount, wave)) continue;
-                const uint64_t distance = static_cast<uint64_t>(wave) - control;
-                if (distance < bestDistance) {
-                    bestDistance = distance;
+
+                // Passing expectedCount=0 makes LooksLikeAkiBankAt validate
+                // the live PtrTablesV2 count instead of enforcing stock count.
+                if (!LooksLikeAkiBankAt(rom.z64, control, 0, wave)) continue;
+
+                const uint64_t countPenalty =
+                    liveCount == stockCount ? 0ULL :
+                    0x100000000ULL +
+                    static_cast<uint64_t>(liveCount > stockCount
+                        ? liveCount - stockCount : stockCount - liveCount) * 0x100000ULL;
+                const uint64_t locationPenalty =
+                    oldControl == 0 ? 0ULL :
+                    static_cast<uint64_t>(control > oldControl
+                        ? control - oldControl : oldControl - control);
+                const uint64_t pairDistance = static_cast<uint64_t>(wave) - control;
+                const uint64_t score = countPenalty + locationPenalty + pairDistance;
+
+                if (score < bestScore) {
+                    bestScore = score;
                     bestControl = control;
                     bestWave = wave;
                 }
             }
         }
+
         if (bestControl == 0 || bestWave == 0) {
             error = "Could not auto-detect a structurally valid CTL/TBL pair for bank " +
-                    Hex4(bank.bankId) + " with " + std::to_string(expectedCount) + " sounds.";
+                    Hex4(bank.bankId) + ". Stock profile count is " +
+                    std::to_string(stockCount) +
+                    "; no valid stock or expanded bank was found.";
             return false;
         }
+
         usedControls.insert(bestControl);
         usedWaves.insert(bestWave);
-        const uint32_t oldControl = bank.controlOffset;
         bank.controlOffset = bestControl;
         bank.waveOffset = bestWave;
         if (bank.sequenceObjectOffset != 0) {
             const int64_t guessedSequence = static_cast<int64_t>(bestControl) + sequenceDelta;
-            bank.sequenceObjectOffset = guessedSequence > 0 && guessedSequence < static_cast<int64_t>(rom.z64.size())
+            bank.sequenceObjectOffset =
+                guessedSequence > 0 && guessedSequence < static_cast<int64_t>(rom.z64.size())
                 ? static_cast<uint32_t>(guessedSequence) : 0;
         }
-        (void)oldControl;
     }
     return true;
 }

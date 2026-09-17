@@ -28,7 +28,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.3";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.6";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -1273,7 +1273,7 @@ void OpenExportFolder() {
 
 void ShowAbout() {
     const wchar_t* text =
-        L"AKI Sound Studio 0.7.3\r\n\r\n"
+        L"AKI Sound Studio 0.7.6\r\n\r\n"
         L"Windows-only sound-bank editor for Virtual Pro-Wrestling 2, WWF WrestleMania 2000, WCW/nWo Revenge Redux, and WWF No Mercy.\r\n\r\n"
         L"Current features:\r\n"
         L"• Stock and compatible-hack ROM detection\r\n"
