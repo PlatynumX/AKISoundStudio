@@ -2908,10 +2908,19 @@ bool RelocateBankForExpansion(LoadedRom& rom,
         const uint64_t newTbl64 = Align16Size(rom.z64.size());
         const uint64_t end64 =
             newTbl64 + tblBytes + Align16(extraWaveBytes) + 0x100U;
-        constexpr uint64_t kMaxRom = 64ULL * 1024ULL * 1024ULL;
+        // Expanded hacks may already exceed the retail-era 64 MiB cartridge
+        // size. Do not impose that historical size as an editor policy.
+        // ROM offsets are currently represented as uint32_t, so enforce the
+        // actual representation boundary instead.
+        constexpr uint64_t kMaxAddressableRomBytes =
+            static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1ULL;
 
-        if (end64 > kMaxRom) {
-            error = "Relocating this bank TBL would exceed the 64 MiB N64 ROM limit.";
+        if (newTbl64 > std::numeric_limits<uint32_t>::max() ||
+            end64 > kMaxAddressableRomBytes ||
+            end64 > std::numeric_limits<size_t>::max()) {
+            error =
+                "Relocating this bank TBL would exceed AKI Sound Studio's "
+                "32-bit ROM-offset address range.";
             return false;
         }
 
@@ -2974,11 +2983,19 @@ bool RelocateBankForExpansion(LoadedRom& rom,
     const uint64_t newCtl64 = Align16Size(rom.z64.size());
     const uint64_t newTbl64 = Align16Size(newCtl64 + ctlBytes + Align16(extraCtlBytes) + 0x100U);
     const uint64_t end64 = newTbl64 + tblBytes + Align16(extraWaveBytes) + 0x100U;
-    constexpr uint64_t kMaxRom = 64ULL * 1024ULL * 1024ULL;
-    if (end64 > kMaxRom) {
-        error = "Relocating this bank for expansion would exceed the 64 MiB N64 ROM limit.";
+    constexpr uint64_t kMaxAddressableRomBytes =
+        static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1ULL;
+
+    if (newCtl64 > std::numeric_limits<uint32_t>::max() ||
+        newTbl64 > std::numeric_limits<uint32_t>::max() ||
+        end64 > kMaxAddressableRomBytes ||
+        end64 > std::numeric_limits<size_t>::max()) {
+        error =
+            "Relocating this bank for expansion would exceed AKI Sound Studio's "
+            "32-bit ROM-offset address range.";
         return false;
     }
+
     const uint32_t newCtl = static_cast<uint32_t>(newCtl64);
     const uint32_t newTbl = static_cast<uint32_t>(newTbl64);
     const size_t oldSize = rom.z64.size();
