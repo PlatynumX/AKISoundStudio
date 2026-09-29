@@ -28,7 +28,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"AKISoundStudioWindow";
-constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.8";
+constexpr wchar_t kAppTitle[] = L"AKI Sound Studio 0.7.10";
 
 constexpr int IDC_OPEN_ROM = 1001;
 constexpr int IDC_EXPORT_CSV = 1002;
@@ -666,9 +666,61 @@ void LoadRomFromPath(const std::filesystem::path& path) {
                    (std::wstring(kAppTitle) + L" — " + path.filename().wstring()).c_str());
 }
 
+bool NeedsRetroRandyCheck(const std::filesystem::path& path) {
+    constexpr uintmax_t k64MiB = 64ULL * 1024ULL * 1024ULL;
+
+    std::error_code ec;
+    const uintmax_t size = std::filesystem::file_size(path, ec);
+    const bool largerThan64MiB = !ec && size > k64MiB;
+
+    const std::wstring lowerName = ToLower(path.filename().wstring());
+    const bool filenameContainsRedux =
+        lowerName.find(L"redux") != std::wstring::npos;
+
+    return largerThan64MiB || filenameContainsRedux;
+}
+
+bool ConfirmRomSupport(const std::filesystem::path& path) {
+    if (!NeedsRetroRandyCheck(path)) {
+        return true;
+    }
+
+    const int answer = MessageBoxW(
+        gApp.mainWindow,
+        L"Is this one of Retro Randy's ROMs?",
+        kAppTitle,
+        MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+
+    if (answer == IDNO) {
+        return true;
+    }
+
+    MessageBoxW(
+        gApp.mainWindow,
+        L"Retro Randy's work is unsupported. If you reopen and click no it still won't work.",
+        kAppTitle,
+        MB_OK | MB_ICONINFORMATION);
+
+    return false;
+}
+
 void OpenRom() {
-    const std::wstring selected = OpenRomDialog();
-    if (!selected.empty()) LoadRomFromPath(selected);
+    for (;;) {
+        const std::wstring selected = OpenRomDialog();
+
+        if (selected.empty()) {
+            return;
+        }
+
+        const std::filesystem::path path(selected);
+
+        if (!ConfirmRomSupport(path)) {
+            continue;
+        }
+
+        LoadRomFromPath(path);
+        return;
+    }
 }
 
 std::wstring SuggestedSoundFilename(const aki::SoundRecord& sound) {
